@@ -1,0 +1,45 @@
+# Environment variables (chứa secrets)
+.env
+.env.local
+.env.*.local
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+
+# SSL/TLS certificates (private keys)
+nginx/certs/*.key
+nginx/certs/*.pem
+nginx/certs/*.crt
+!nginx/certs/.gitkeep
+
+# Docker volumes data
+mysql-data/
+grafana-data/
+prometheus-data/
+loki-data/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Impeccable / AI agent config (nếu có)
+.impeccable/
+.claude/
