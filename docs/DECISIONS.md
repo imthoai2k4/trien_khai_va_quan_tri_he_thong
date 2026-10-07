@@ -194,19 +194,54 @@ Grafana:        http://localhost:3001
 
 ---
 
-## 11. Câu hỏi mở (chưa quyết định)
+## 11. Câu hỏi đã xác nhận
+
+- **Ngôn ngữ giao diện:** Tiếng Việt ✅
+- **Poster phim demo:** Dùng ảnh miễn phí từ internet (Unsplash, v.v.) ✅
+
+## 12. Câu hỏi mở (chưa quyết định)
 
 1. **Tên repository GitHub chính thức:** Kế hoạch gợi ý `MSSV-movie-ticket` — cần MSSV thực tế từ người dùng.
 2. **Tên brand/thương hiệu:** Hiện tại là `TKPM` (tên thư mục) — chưa rõ đây có phải tên chính thức.
 3. **Accessibility target:** Chưa chọn chuẩn WCAG cụ thể nào.
 4. **phpMyAdmin trong production:** Kế hoạch cho expose port 8080 để demo — cần xác nhận có giới hạn truy cập không (IP whitelist, basic auth).
-5. **Poster phim:** Dữ liệu demo cần poster — dùng URL placeholder hay tạo ảnh thật?
-6. **Ngôn ngữ giao diện:** Tiếng Việt hay tiếng Anh?
 
 ---
+
+## 13. Quyết định Task 1 — Bộ khung repository
+
+### 13.1. Dependency của app
+
+| Package | Phiên bản khai báo | Vai trò | Task dùng |
+|---------|--------------------|---------|-----------|
+| `express` | `^4.21.2` | Web framework | Task 4 |
+| `mysql2` | `^3.11.5` | Driver MySQL (promise pool) | Task 4 |
+| `express-session` | `^1.18.1` | Session-based auth | Task 8 |
+| `bcryptjs` | `^2.4.3` | Hash mật khẩu | Task 8 |
+| `prom-client` | `^15.1.3` | `/metrics` cho Prometheus | Task 11 |
+| `dotenv` | `^16.4.5` | Nạp `.env` khi chạy cục bộ | Task 1 |
+
+Quyết định kèm theo:
+
+- **Dùng `bcryptjs`, không dùng `bcrypt`.** `bcrypt` cần build native; `bcryptjs` là JS thuần, cài giống nhau trên Windows và trong image Alpine. Mục 4 cho phép chọn một trong hai.
+- **Chốt Express 4 (`^4.21.2`), không dùng Express 5.** Express 4 ổn định và khớp tài liệu/hướng dẫn phổ biến; chưa có yêu cầu nào cần tính năng của Express 5.
+- **Không dùng `nodemon`.** Dùng `node --watch` có sẵn từ Node 18 để giảm dependency.
+- **Dùng CommonJS** (`require`), không dùng ESM — giữ đơn giản, khớp ví dụ Express phổ biến.
+- `dotenv` được thêm vì Task 4 yêu cầu cấu hình DB pool qua biến môi trường và cần cách nạp `.env` khi chạy cục bộ ngoài Docker.
+
+### 13.2. Phạm vi bộ khung
+
+- `app/src/server.js` chỉ có `GET /healthz` (kiểm tra tiến trình) và phục vụ file tĩnh từ `app/src/public/`. **Không** có API nghiệp vụ — `/healthz` không phải endpoint nghiệp vụ.
+- `app/src/public/index.html` chỉ là trang giữ chỗ của bộ khung, không phải giao diện thật (Task 3).
+- `app/Dockerfile` là bản tối thiểu, chạy bằng user non-root `node`. Healthcheck, volume và cấu hình đầy đủ thuộc Task 9.
+- `docker-compose.yml` **chỉ có service `app`**. Việc map cổng `APP_PORT` trực tiếp ra host là tạm thời để kiểm tra skeleton; **phải bỏ khi Nginx được thêm ở Task 9**, vì Nginx là điểm truy cập công khai duy nhất (mục 8).
+- `database/` chỉ có `.gitkeep`. Không tạo schema hay dữ liệu mẫu (Task 2).
+- `nginx/certs/` chỉ có `.gitkeep`; chưa có `nginx.conf` (Task 10).
 
 ## Lịch sử cập nhật
 
 | Ngày | Task | Thay đổi |
 |------|------|----------|
 | 2026-10-07 | Task 0 | Tạo tài liệu quyết định ban đầu |
+| 2026-10-07 | Task 0 | Xác nhận ngôn ngữ giao diện tiếng Việt và poster demo dùng ảnh miễn phí |
+| 2026-10-07 | Task 1 | Thêm mục 13: bộ khung repository, chốt dependency và phạm vi skeleton |

@@ -1,0 +1,23 @@
+# Docker Compose — BỘ KHUNG Task 1.
+#
+# Hiện chỉ có service `app` để kiểm tra bộ khung chạy được.
+# Các service còn lại sẽ được bổ sung ở task sau, KHÔNG nằm trong Task 1:
+#   - mysql, phpmyadmin, nginx          -> Task 9 / Task 10
+#   - prometheus, grafana, cadvisor,
+#     mysqld-exporter                   -> Task 11 / Task 12
+#   - loki, promtail                    -> Task 13
+#
+# LƯU Ý: port của `app` đang được map trực tiếp ra host chỉ để tiện kiểm tra
+# skeleton. Khi có Nginx (Task 9) thì bỏ mapping này — Nginx là điểm truy cập
+# công khai duy nhất theo docs/DECISIONS.md mục 8.
+
+services:
+  app:
+    build:
+      context: ./app
+    environment:
+      NODE_ENV: development
+      APP_PORT: ${APP_PORT:-3000}
+    ports:
+      - "${APP_PORT:-3000}:${APP_PORT:-3000}"
+    restart: unless-stopped
