@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trang quản trị — TKPM Cinema</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { background-color: var(--bg-base); color: var(--text-primary); }
+    .admin-container { padding: 2rem; max-width: 1200px; margin: 0 auto; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .stat-card { background: var(--bg-card); padding: 1.5rem; border-radius: var(--radius); border: 1px solid var(--glass-border); text-align: center; }
+    .stat-value { font-size: 2rem; font-weight: 700; color: var(--brand-red); }
+    .table-wrapper { background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: var(--radius); overflow-x: auto; padding: 1rem; }
+    table { width: 100%; text-align: left; border-collapse: collapse; }
+    th, td { padding: 0.75rem; border-bottom: 1px solid var(--glass-border); }
+    th { color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    
+    #login-form { max-width: 400px; margin: 10vh auto; background: var(--bg-surface); padding: 2rem; border-radius: var(--radius); border: 1px solid var(--glass-border); }
+    .form-group { margin-bottom: 1rem; }
+    .form-control { width: 100%; padding: 0.75rem; background: var(--bg-base); border: 1px solid var(--glass-border); color: var(--text-primary); border-radius: var(--radius); }
+    .form-control:focus { outline: none; border-color: var(--brand-red); }
+    
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header__inner">
+      <div class="logo">🎟️ <span class="text-white font-bold">TKPM</span>Cinema <span class="badge badge--red" style="margin-left:8px">ADMIN</span></div>
+      <button class="btn btn--outline hidden" id="logout-btn">Đăng xuất</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Màn hình Đăng nhập -->
+    <div id="login-section">
+      <form id="login-form">
+        <h2 style="margin-bottom:1.5rem; text-align:center">Đăng nhập Quản trị</h2>
+        <div id="login-error" class="text-brand text-sm" style="margin-bottom:1rem; text-align:center"></div>
+        <div class="form-group">
+          <label class="text-muted text-sm" style="display:block; margin-bottom:4px">Email</label>
+          <input type="email" id="email" class="form-control" required value="admin@demo.com">
+        </div>
+        <div class="form-group">
+          <label class="text-muted text-sm" style="display:block; margin-bottom:4px">Mật khẩu</label>
+          <input type="password" id="password" class="form-control" required value="Admin@123">
+        </div>
+        <button type="submit" class="btn btn--primary" style="width:100%; margin-top:1rem" id="login-submit-btn">Đăng nhập</button>
+      </form>
+    </div>
+
+    <!-- Màn hình Dashboard -->
+    <div id="dashboard-section" class="admin-container hidden">
+      <h2 style="margin-bottom:1.5rem">Thống kê nhanh</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="text-muted text-sm">Tổng đơn hàng thành công</div>
+          <div class="stat-value" id="stat-bookings">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="text-muted text-sm">Tổng doanh thu (VND)</div>
+          <div class="stat-value" id="stat-revenue">0</div>
+        </div>
+      </div>
+
+      <h2 style="margin-bottom:1rem; margin-top:2rem">10 Giao dịch gần nhất</h2>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Mã đơn</th>
+              <th>Khách hàng</th>
+              <th>Ngày tạo</th>
+              <th class="text-right">Tổng tiền (VND)</th>
+            </tr>
+          </thead>
+          <tbody id="recent-bookings-tbody">
+            <!-- Render by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/admin.js"></script>
+</body>
+</html>

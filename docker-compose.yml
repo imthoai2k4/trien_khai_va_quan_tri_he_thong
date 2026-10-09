@@ -1,23 +1,81 @@
-# Docker Compose — BỘ KHUNG Task 1.
-#
-# Hiện chỉ có service `app` để kiểm tra bộ khung chạy được.
-# Các service còn lại sẽ được bổ sung ở task sau, KHÔNG nằm trong Task 1:
-#   - mysql, phpmyadmin, nginx          -> Task 9 / Task 10
-#   - prometheus, grafana, cadvisor,
-#     mysqld-exporter                   -> Task 11 / Task 12
-#   - loki, promtail                    -> Task 13
-#
-# LƯU Ý: port của `app` đang được map trực tiếp ra host chỉ để tiện kiểm tra
-# skeleton. Khi có Nginx (Task 9) thì bỏ mapping này — Nginx là điểm truy cập
-# công khai duy nhất theo docs/DECISIONS.md mục 8.
-
 services:
+  # 1. Ứng dụng Node.js (Backend + Frontend)
   app:
     build:
       context: ./app
+    container_name: tkpm_app
     environment:
-      NODE_ENV: development
-      APP_PORT: ${APP_PORT:-3000}
-    ports:
-      - "${APP_PORT:-3000}:${APP_PORT:-3000}"
+      - NODE_ENV=production
+      - APP_PORT=3000
+      - MYSQL_HOST=db
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=root
+      - MYSQL_DATABASE=movie_ticket
+      - JWT_SECRET=super_secret_jwt_key_for_prod
+    # KHÔNG dùng ports ở đây, chỉ expose qua Nginx
+    expose:
+      - "3000"
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - tkpm_network
+
+  # 2. Cơ sở dữ liệu MySQL
+  db:
+    image: mysql:8.0
+    container_name: tkpm_db
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=movie_ticket
+    # Ánh xạ init script để tự động chạy khi tạo volume mới
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/1-init.sql
+      - ./database/sample-data.sql:/docker-entrypoint-initdb.d/2-sample-data.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - tkpm_network
+
+  # 3. Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: tkpm_nginx
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - tkpm_network
+
+  # 4. phpMyAdmin (Giới hạn cổng, chỉ dùng cho nội bộ/admin)
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: tkpm_pma
+    environment:
+      - PMA_HOST=db
+      - PMA_USER=root
+      - PMA_PASSWORD=root
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - tkpm_network
+
+volumes:
+  db_data:
+
+networks:
+  tkpm_network:
+    driver: bridge

@@ -373,6 +373,37 @@ Không dùng trigger để enforce quy tắc liên bảng (payment thất bại 
   - Gọi `/api/payments` để giả lập thanh toán (tỉ lệ 80% thành công theo logic cũ).
   - Truyền mã đơn và ID thanh toán sang màn hình kết quả `result.html`.
 
+## 20. Quyết định Task 8 — Đăng nhập và Trang quản trị
+
+### 20.1. Cơ chế xác thực (JWT)
+- **Công nghệ**: Sử dụng `jsonwebtoken` để sinh JWT và `bcryptjs` để kiểm tra mật khẩu đã mã hóa trong MySQL.
+- Mật khẩu của tài khoản Admin được hash bằng `bcrypt` từ trước khi đưa vào dữ liệu mẫu (chống lưu trơn - plaintext).
+- Khi đăng nhập thành công (`POST /api/auth/login`), API trả về Token có thời hạn sử dụng. Client (Trình duyệt) lưu token này vào `sessionStorage` và gửi kèm trong Header `Authorization: Bearer <token>` mỗi khi gọi API quản trị.
+
+### 20.2. Phân quyền (Role-based Access Control)
+- Tạo `authMiddleware.js` với hàm `verifyTokenAndRole()`. Bất kỳ route nào của Admin (`/api/admin/*`) đều phải đi qua Middleware này. Nếu không có token, token hết hạn, hoặc `role` không phải `admin`, API sẽ trả về lỗi `401 Unauthorized` hoặc `403 Forbidden`.
+
+### 20.3. Trang Quản trị tĩnh (`admin.html`)
+- Xây dựng giao diện Đăng nhập và Dashboard cơ bản.
+- Dashboard tự động hiển thị:
+  - Tổng số vé đã đặt thành công.
+  - Tổng doanh thu thực tế.
+  - 10 Giao dịch gần nhất (kết hợp `JOIN` bảng `users` để hiển thị tên khách hàng).
+- Việc thao tác các dữ liệu khác (CRUD Phim, Suất chiếu) sử dụng mô hình RESTful đã dựng trước đó nhưng sẽ được chặn lại thông qua AuthMiddleware (hiện tại Dashboard tập trung vào theo dõi hoạt động kinh doanh).
+
+## 21. Quyết định Task 9 — Docker Compose & Nginx Proxy
+
+### 21.1. Kiến trúc hệ thống Containers
+- **Node.js App (`tkpm_app`)**: Build từ `Dockerfile` (Node 20 Alpine). Không mở cổng trực tiếp ra ngoài host.
+- **MySQL (`tkpm_db`)**: Dùng `mysql:8.0`. Có ánh xạ thư mục `database/` để tự động chạy file `init.sql` và `sample-data.sql` ngay khi lần đầu tiên dựng volume.
+- **Nginx (`tkpm_nginx`)**: Hoạt động như một Reverse Proxy. Nhận yêu cầu từ cổng 80 ở Host, trỏ ngầm vào cổng 3000 của container `app`.
+- **phpMyAdmin (`tkpm_pma`)**: Chạy ở cổng `8080` ở host. Chỉ mở cho mục đích demo/phát triển.
+
+### 21.2. Mức độ phụ thuộc & Healthcheck
+- Cấu hình Nginx phải đợi App (`depends_on: app`).
+- Cấu hình App phải đợi Database sẵn sàng (`depends_on: db: condition: service_healthy`).
+- Database có `healthcheck` ping định kỳ để đảm bảo MySQL thực sự có thể phục vụ (sử dụng lệnh `mysqladmin ping`).
+
 ---
 
 ## Lịch sử cập nhật
@@ -388,3 +419,5 @@ Không dùng trigger để enforce quy tắc liên bảng (payment thất bại 
 | 2026-10-09 | Task 5 | Thêm mục 17: Cập nhật giao diện gọi API /movies, xử lý trạng thái loading/error an toàn |
 | 2026-10-09 | Task 6 | Thêm mục 18: Viết API Booking sử dụng Transaction, khóa ghế an toàn chống đặt trùng |
 | 2026-10-09 | Task 7 | Thêm mục 19: API Thanh toán giả lập, thao tác lặp an toàn, nối luồng UI hoàn chỉnh |
+| 2026-10-09 | Task 8 | Thêm mục 20: JWT Authentication, phân quyền Admin và Dashboard quản trị cơ bản |
+| 2026-10-09 | Task 9 | Thêm mục 21: Kiến trúc Docker Compose, Reverse Proxy Nginx và Database Healthcheck |
