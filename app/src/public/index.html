@@ -1,14 +1,79 @@
 <!DOCTYPE html>
 <html lang="vi">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hệ thống đặt vé xem phim</title>
-  </head>
-  <body>
-    <!-- Trang giữ chỗ của bộ khung (Task 1). Giao diện thật thuộc Task 3. -->
-    <h1>Hệ thống đặt vé xem phim</h1>
-    <p>Bộ khung ứng dụng đã chạy. Giao diện sẽ được bổ sung ở task sau.</p>
-    <p>Kiểm tra tiến trình: <a href="/healthz">/healthz</a></p>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TKPM Cinema — Đặt vé xem phim trực tuyến nhanh chóng, tiện lợi. Chọn phim, suất chiếu, ghế và thanh toán ngay." />
+  <title>TKPM Cinema — Đặt vé xem phim</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar" role="navigation" aria-label="Điều hướng chính">
+    <div class="container navbar__inner">
+      <a class="navbar__logo" href="index.html" aria-label="TKPM Cinema - Trang chủ">
+        <div class="navbar__logo-icon" aria-hidden="true">🎬</div>
+        <div class="navbar__logo-text">TKPM<span>Cinema</span></div>
+      </a>
+      <div class="navbar__nav">
+        <a class="navbar__link" href="index.html">Phim</a>
+        <span class="navbar__demo-badge" aria-label="Phiên bản demo">DEMO</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="page-content" id="main-content">
+    <div class="container">
+
+      <!-- Demo Banner -->
+      <div class="demo-banner" role="note" aria-label="Thông báo demo">
+        <span aria-hidden="true">⚠️</span>
+        <span><strong>Giao diện demo (Task 3).</strong> Dữ liệu mẫu cục bộ — chưa kết nối API. Không có thao tác nào thật sự lưu vào server.</span>
+      </div>
+
+      <!-- Hero -->
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero__bg" aria-hidden="true"></div>
+        <h1 class="hero__title" id="hero-title">Xem phim cùng <br>TKPM Cinema</h1>
+        <p class="hero__subtitle">Đặt vé trực tuyến nhanh chóng. Chọn ghế yêu thích, thanh toán dễ dàng, thưởng thức trải nghiệm điện ảnh tuyệt vời.</p>
+      </section>
+
+      <!-- Filter Tabs -->
+      <div class="section-header" style="margin-top:2rem">
+        <div>
+          <p class="section-header__eyebrow">Lịch chiếu</p>
+          <h2>Phim đang chiếu</h2>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Lọc phim">
+          <button class="tab-btn active" role="tab" aria-selected="true" data-filter="all" id="tab-all">Tất cả</button>
+          <button class="tab-btn" role="tab" aria-selected="false" data-filter="now_showing" id="tab-now">Đang chiếu</button>
+          <button class="tab-btn" role="tab" aria-selected="false" data-filter="coming_soon" id="tab-soon">Sắp chiếu</button>
+        </div>
+      </div>
+
+      <div class="section-divider" aria-hidden="true"></div>
+
+      <!-- Movies Grid -->
+      <section aria-label="Danh sách phim">
+        <div class="movies-grid" id="movies-grid" role="list"></div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer" role="contentinfo">
+    <div class="container footer__inner">
+      <span class="footer__brand">🎬 TKPM Cinema</span>
+      <span class="footer__text">© 2026 TKPM Cinema. Dữ liệu demo — Task 3.</span>
+    </div>
+  </footer>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container" role="region" aria-label="Thông báo" aria-live="polite"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
 </html>

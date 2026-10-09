@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Xác nhận và thanh toán vé — TKPM Cinema." />
+  <title>Thanh toán — TKPM Cinema</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar" role="navigation" aria-label="Điều hướng chính">
+    <div class="container navbar__inner">
+      <a class="navbar__logo" href="index.html" aria-label="TKPM Cinema - Trang chủ">
+        <div class="navbar__logo-icon" aria-hidden="true">🎬</div>
+        <div class="navbar__logo-text">TKPM<span>Cinema</span></div>
+      </a>
+      <div class="navbar__nav">
+        <a class="navbar__link" href="index.html">Phim</a>
+        <span class="navbar__demo-badge" aria-label="Phiên bản demo">DEMO</span>
+      </div>
+    </div>
+  </nav>
+
+  <main class="page-content" id="main-content">
+    <div class="container">
+
+      <!-- Demo Banner -->
+      <div class="demo-banner" role="note">
+        <span aria-hidden="true">⚠️</span>
+        <span><strong>Thanh toán giả lập.</strong> Không có tiền thật nào bị trừ. Kết quả ngẫu nhiên (~80% thành công) để demo cả 2 trạng thái.</span>
+      </div>
+
+      <!-- Progress Steps -->
+      <div class="progress-steps" role="list" aria-label="Bước đặt vé">
+        <div class="step done" role="listitem">
+          <div class="step__dot">✓</div>
+          <span class="step__label">Chọn phim</span>
+        </div>
+        <div class="step-connector done" aria-hidden="true"></div>
+        <div class="step done" role="listitem">
+          <div class="step__dot">✓</div>
+          <span class="step__label">Chọn ghế</span>
+        </div>
+        <div class="step-connector done" aria-hidden="true"></div>
+        <div class="step active" role="listitem">
+          <div class="step__dot" aria-current="step">3</div>
+          <span class="step__label">Thanh toán</span>
+        </div>
+        <div class="step-connector" aria-hidden="true"></div>
+        <div class="step" role="listitem">
+          <div class="step__dot">4</div>
+          <span class="step__label">Xác nhận</span>
+        </div>
+      </div>
+
+      <h1 style="margin-bottom:2rem">💳 Xác nhận đặt vé</h1>
+
+      <!-- Checkout Layout -->
+      <div class="checkout-layout">
+
+        <!-- Left: Order Details + Payment -->
+        <div>
+
+          <!-- Order Table -->
+          <section aria-labelledby="order-heading">
+            <h2 id="order-heading" style="font-size:1.125rem;margin-bottom:1rem">📋 Chi tiết đơn hàng</h2>
+            <div style="background:var(--bg-card);border:1px solid var(--glass-border);border-radius:var(--radius-lg);overflow:hidden">
+              <table class="order-table" aria-label="Danh sách vé">
+                <thead>
+                  <tr>
+                    <th scope="col">Ghế</th>
+                    <th scope="col">Phim</th>
+                    <th scope="col">Suất chiếu</th>
+                    <th scope="col" class="text-right">Giá</th>
+                  </tr>
+                </thead>
+                <tbody id="order-tbody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Payment Methods -->
+          <section aria-labelledby="payment-heading" style="margin-top:2rem">
+            <h2 id="payment-heading" style="font-size:1.125rem;margin-bottom:1rem">💰 Phương thức thanh toán</h2>
+
+            <div class="payment-methods" role="radiogroup" aria-label="Chọn phương thức thanh toán">
+
+              <label class="payment-method selected" data-method="e_wallet" for="pay-ewallet">
+                <div class="payment-method__icon" aria-hidden="true">💳</div>
+                <div>
+                  <p class="payment-method__name">Ví điện tử</p>
+                  <p class="payment-method__desc">MoMo, ZaloPay, VNPay</p>
+                </div>
+                <input type="radio" name="payment" id="pay-ewallet" value="e_wallet" checked aria-label="Thanh toán bằng ví điện tử" />
+              </label>
+
+              <label class="payment-method" data-method="credit_card" for="pay-card">
+                <div class="payment-method__icon" aria-hidden="true">💳</div>
+                <div>
+                  <p class="payment-method__name">Thẻ tín dụng / ghi nợ</p>
+                  <p class="payment-method__desc">Visa, Mastercard, JCB</p>
+                </div>
+                <input type="radio" name="payment" id="pay-card" value="credit_card" aria-label="Thanh toán bằng thẻ tín dụng hoặc ghi nợ" />
+              </label>
+
+              <label class="payment-method" data-method="bank_transfer" for="pay-bank">
+                <div class="payment-method__icon" aria-hidden="true">🏦</div>
+                <div>
+                  <p class="payment-method__name">Chuyển khoản ngân hàng</p>
+                  <p class="payment-method__desc">Internet Banking, ATM</p>
+                </div>
+                <input type="radio" name="payment" id="pay-bank" value="bank_transfer" aria-label="Thanh toán bằng chuyển khoản ngân hàng" />
+              </label>
+
+              <label class="payment-method" data-method="cash" for="pay-cash">
+                <div class="payment-method__icon" aria-hidden="true">💵</div>
+                <div>
+                  <p class="payment-method__name">Thanh toán tại quầy</p>
+                  <p class="payment-method__desc">Thanh toán tiền mặt tại rạp</p>
+                </div>
+                <input type="radio" name="payment" id="pay-cash" value="cash" aria-label="Thanh toán tiền mặt tại quầy" />
+              </label>
+            </div>
+          </section>
+
+          <!-- Action Buttons -->
+          <div style="margin-top:2rem;display:flex;gap:1rem;flex-wrap:wrap">
+            <button class="btn btn--gold btn--lg" id="pay-btn" style="flex:1;min-width:200px">
+              🔒 Xác nhận thanh toán
+            </button>
+            <a href="seats.html" class="btn btn--ghost btn--lg">← Chọn lại ghế</a>
+          </div>
+
+          <p class="text-xs text-muted" style="margin-top:1rem">
+            🔒 Giao dịch demo — không có tiền thật. Kết quả là ngẫu nhiên để minh họa cả hai trạng thái thành công và thất bại.
+          </p>
+        </div>
+
+        <!-- Right: Booking Summary -->
+        <aside aria-labelledby="checkout-summary-heading">
+          <div class="booking-panel">
+            <h3 class="booking-panel__title" id="checkout-summary-heading">🎟️ Tóm tắt đặt vé</h3>
+            <div id="checkout-summary"></div>
+          </div>
+        </aside>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer" role="contentinfo">
+    <div class="container footer__inner">
+      <span class="footer__brand">🎬 TKPM Cinema</span>
+      <span class="footer__text">© 2026 TKPM Cinema. Dữ liệu demo — Task 3.</span>
+    </div>
+  </footer>
+
+  <div id="toast-container" class="toast-container" role="region" aria-label="Thông báo" aria-live="polite"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

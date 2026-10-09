@@ -238,6 +238,143 @@ Quyết định kèm theo:
 - `database/` chỉ có `.gitkeep`. Không tạo schema hay dữ liệu mẫu (Task 2).
 - `nginx/certs/` chỉ có `.gitkeep`; chưa có `nginx.conf` (Task 10).
 
+## 14. Quyết định Task 2 — Schema MySQL
+
+### 14.1. Tên cột và kiểu dữ liệu
+
+- Dùng `duration_minutes` (thay vì `duration`) để rõ đơn vị, tránh nhầm lẫn với các cột đơn vị khác.
+- `price` trong `showtimes` kiểu `DECIMAL(10,2)` — đơn giá theo suất chiếu (không phải theo ghế), cho phép phòng VIP/thường có giá khác nhau về sau.
+- `total_amount` trong `bookings` phản ánh tổng thực thu tại thời điểm tạo đơn, không tính lại qua JOIN — tránh sai số khi giá thay đổi.
+
+### 14.2. Cơ chế FK tổ hợp bảo vệ nhất quán dữ liệu
+
+`bookings` có `UNIQUE (id, showtime_id)`, và `booking_seats` tham chiếu bằng FK tổ hợp `(booking_id, showtime_id) → bookings(id, showtime_id)`. Nhờ vậy `booking_seats.showtime_id` không thể lệch với `showtime_id` của đơn — điều kiện để `UNIQUE(showtime_id, seat_id)` thực sự có ý nghĩa.
+
+### 14.3. Quy ước vòng đời ghế
+
+- Ghế chỉ bị giữ khi có dòng trong `booking_seats`.
+- Đơn `failed` và `cancelled` phải **xóa** các dòng `booking_seats` tương ứng (Task 4 phụ trách).
+- `UNIQUE(showtime_id, seat_id)` là vô điều kiện — không thể giữ ghế của đơn thất bại mà không chặn đặt mới.
+
+### 14.4. Không dùng trigger
+
+Không dùng trigger để enforce quy tắc liên bảng (payment thất bại ≠ booking confirmed). Trigger áp đặt thứ tự thao tác cứng, dễ phá vỡ transaction ở Task 4. Tầng DB bảo đảm tính nhất quán nội tại của từng bảng (CHECK constraints), còn quy tắc liên bảng được enforce trong transaction ở Task 4.
+
+### 14.5. Dữ liệu mẫu
+
+- Mật khẩu demo: bcrypt hash thật (`bcryptjs`). `admin@demo.com` / `Admin@123`, `user@demo.com` và `binh@demo.com` / `User@123`.
+- Ngày suất chiếu: `2026-10-10 → 2026-10-12`. Sau thời điểm này dữ liệu là quá khứ; cần cập nhật nếu demo "suất sắp chiếu".
+- `sample-data.sql` có thể chạy lại nhiều lần (xóa ID mẫu trước khi chèn lại).
+
+---
+
+## 15. Quyết định Task 3 — Giao diện static
+
+### 15.1. Cấu trúc file
+
+| File | Vai trò |
+|------|---------|
+| `public/index.html` | Danh sách phim + filter now_showing/coming_soon |
+| `public/movie.html` | Chi tiết phim + chọn suất chiếu theo ngày |
+| `public/seats.html` | Sơ đồ ghế theo phòng |
+| `public/checkout.html` | Xác nhận đơn hàng + chọn phương thức thanh toán |
+| `public/result.html` | Kết quả thành công / thất bại + thẻ vé |
+| `public/css/style.css` | Design system toàn bộ (tokens, components, utilities) |
+| `public/js/data.js` | Dữ liệu mẫu local khớp `sample-data.sql`, helper functions |
+| `public/js/app.js` | State management (sessionStorage), router, page logic |
+
+### 15.2. State Management
+
+- Dùng `sessionStorage` để truyền state (selectedMovieId, selectedShowtimeId, selectedSeatIds, bookingResult) giữa các trang HTML riêng biệt.
+- Không dùng URL query string cho state nhạy cảm (trừ `movie.html?id=N` để có thể bookmark và share link phim).
+
+### 15.3. Thanh toán giả lập
+
+- Kết quả thanh toán ngẫu nhiên: ~80% thành công, ~20% thất bại — để demo được cả hai trạng thái mà không cần thao tác đặc biệt.
+- Khi thất bại: không tạo booking code, thẻ vé hiển thị trạng thái thất bại, ghế không bị giữ (phản ánh đúng quy ước Task 2).
+- Không gọi bất kỳ API nào; không lưu dữ liệu vào server.
+
+### 15.4. Accessibility
+
+- Mọi button/input có `aria-label` hoặc label rõ ràng.
+- Sơ đồ ghế dùng `role="group"` + `aria-label`; ghế là `button` với `aria-pressed`.
+- Dùng `role="note"` cho demo banner, `aria-live="polite"` cho các vùng cập nhật động.
+- Navigation keyboard: `:focus-visible` style rõ ràng.
+
+### 15.5. Thiết kế
+
+- Dark mode (nền `#0a0a0f`), palette đỏ-cam-vàng theo chủ đề cinema.
+- Font: `Outfit` (display/heading) + `Inter` (body) từ Google Fonts.
+- Glassmorphism cho navbar, booking panel.
+- Micro-animation: card hover lift, seat scale, result icon pop, ticket slide-up.
+- Responsive: 1-cột ở mobile, 2-cột (phim+info, sơ đồ+panel) ở ≥1024px.
+
+## 16. Quyết định Task 4 — Express Backend (API Đọc)
+
+### 16.1. Cấu trúc và Kiến trúc Backend
+- Cấu trúc module rõ ràng: `routes` (định tuyến), `controllers` (xử lý logic, lấy dữ liệu), `services` (kết nối cơ sở dữ liệu), `middleware` (xử lý lỗi).
+- Dùng `mysql2/promise` với connection pool, cấu hình lấy từ biến môi trường qua `dotenv`.
+- Sử dụng Parameterized Queries (`db.execute('... WHERE id = ?', [id])`) cho mọi truy vấn để phòng chống SQL Injection.
+
+### 16.2. Xử lý lỗi (Error Handling)
+- Middleware xử lý lỗi tập trung `errorHandler.js`.
+- Không trả về `stack trace` hoặc chi tiết lỗi nhạy cảm của MySQL cho client (luôn trả `{"error": "Internal Server Error"}` với lỗi 500), nhưng log chi tiết (bao gồm đường dẫn, method, error msg) ở phía server.
+
+### 16.3. API Đọc dữ liệu
+- API được thiết kế dưới dạng RESTful:
+  - `GET /api/movies` (Hỗ trợ query `?status=...`)
+  - `GET /api/movies/:id`
+  - `GET /api/movies/:id/showtimes` (Lấy kèm thông tin rạp và phòng chiếu qua lệnh `JOIN`).
+- Dữ liệu trả về dưới dạng JSON thô. Giao diện (Task 5) sẽ chịu trách nhiệm fetch và hiển thị.
+- Các route booking, seats, và thanh toán chưa được implement (sẽ thuộc Task 6, 7).
+
+## 17. Quyết định Task 5 — Nối Frontend tĩnh với API Backend
+
+### 17.1. Chuyển đổi Fetch API
+- Các trang `index.html` (danh sách phim) và `movie.html` (chi tiết phim) đã được cập nhật logic JS (`app.js`) để ngắt kết nối với `DEMO_DATA` cho phần dữ liệu tĩnh. Thay vào đó, gọi trực tiếp `/api/movies` và `/api/movies/:id`.
+- Helper functions từ `DEMO_DATA` (như `formatPrice`, `formatDatetime`, `formatDuration`) vẫn được tái sử dụng để giảm thiểu lặp logic format.
+
+### 17.2. Xử lý trạng thái (Loading & Error State)
+- **Loading**: Hiển thị text "Đang tải dữ liệu phim..." ngay khi gọi API.
+- **Error**: Do MySQL chưa được khởi động trên môi trường host, API sẽ trả về lỗi `500`. JS ở client bắt lỗi này và render thông báo "Lỗi: Không thể tải dữ liệu từ máy chủ (có thể Database đang offline)" ra giữa màn hình thay vì vỡ layout hoặc báo trắng trang.
+
+### 17.3. Giới hạn phạm vi kết nối
+- Các trang luồng thanh toán (`seats.html`, `checkout.html`, `result.html`) tạm thời chưa kết nối API vì các endpoint xử lý giữ chỗ, ghế ngồi (thuộc Task 6) và booking (thuộc Task 7) chưa được xây dựng trên backend. Sẽ được nối tuần tự theo các task tiếp theo.
+
+## 18. Quyết định Task 6 — Trạng thái ghế và tạo booking an toàn (Transaction)
+
+### 18.1. API Đọc Sơ Đồ Ghế (`GET /api/showtimes/:id/seats`)
+- Trả về danh sách toàn bộ ghế thuộc phòng của suất chiếu đó.
+- Cross-check với bảng `booking_seats` để gán thêm cờ `is_booked` = `true/false` cho từng ghế.
+- Điều này loại bỏ hoàn toàn cơ chế lấy ghế cứng từ `DEMO_DATA.getBookedSeats()`.
+
+### 18.2. API Tạo Booking An Toàn (`POST /api/bookings`)
+- Đầu vào: `showtime_id`, `seat_ids` (mảng tối đa 8 ghế).
+- **Validation**: Đảm bảo tất cả ID ghế đều có thật, và cùng thuộc về `room_id` của `showtime_id` đó.
+- **Transaction**: 
+  - Tạo record trong bảng `bookings` (`status = pending`).
+  - Loop insert từng ghế vào `booking_seats`.
+- **Concurrency (Tranh chấp ghế)**: Nếu có 2 người cùng đặt 1 ghế, nhờ constraint `UNIQUE (showtime_id, seat_id)` trên MySQL, người đến sau sẽ gặp lỗi `ER_DUP_ENTRY` (mã 1062).
+  - Node.js catch lỗi này, gọi `connection.rollback()` hủy toàn bộ đơn, và trả về HTTP 409 Conflict với dòng chữ `"Một hoặc nhiều ghế đã bị người khác đặt. Vui lòng chọn lại."`
+
+## 19. Quyết định Task 7 — Thanh toán giả lập và mã vé
+
+### 19.1. API Thanh Toán (`POST /api/payments`)
+- Đầu vào: `booking_id`, `method`, `simulate_status`.
+- **Idempotency (Thao tác lặp an toàn)**: Dùng `SELECT ... FOR UPDATE` để khóa dòng booking trong Database. Nếu trạng thái không còn là `pending` (đã `confirmed` hoặc `failed`), lập tức trả về lỗi. Chống lại việc gửi đúp request tạo ra nhiều payment success hoặc thanh toán thành công 2 lần.
+- **Xử lý thất bại**: Nếu giả lập trả về `failed`, lập tức cập nhật trạng thái booking thành `failed` và thực thi `DELETE FROM booking_seats WHERE booking_id = ?` để giải phóng ghế cho người khác mua.
+- **Xử lý thành công**: Nếu `success`, cập nhật booking thành `confirmed` và ghi nhận `paid_at`. Mã vé chỉ có giá trị khi booking `confirmed`.
+
+### 19.2. Nối API vào Giao diện (App.js)
+- `initSeatsPage`:
+  - Gọi `/api/showtimes/:id/seats` để lấy sơ đồ thật và trạng thái `is_booked` thật, không dùng hàm giả của `data.js`.
+  - Nút "Tiếp tục thanh toán" gọi `/api/bookings` để khóa ghế an toàn. Nếu dính lỗi trùng ghế 409, tự động reload lại trang sau 1.5s để cập nhật sơ đồ ghế mới nhất.
+- `initCheckoutPage`:
+  - Gọi `/api/payments` để giả lập thanh toán (tỉ lệ 80% thành công theo logic cũ).
+  - Truyền mã đơn và ID thanh toán sang màn hình kết quả `result.html`.
+
+---
+
 ## Lịch sử cập nhật
 
 | Ngày | Task | Thay đổi |
@@ -245,3 +382,9 @@ Quyết định kèm theo:
 | 2026-10-07 | Task 0 | Tạo tài liệu quyết định ban đầu |
 | 2026-10-07 | Task 0 | Xác nhận ngôn ngữ giao diện tiếng Việt và poster demo dùng ảnh miễn phí |
 | 2026-10-07 | Task 1 | Thêm mục 13: bộ khung repository, chốt dependency và phạm vi skeleton |
+| 2026-10-09 | Task 2 | Thêm mục 14: schema 9 bảng, cơ chế FK tổ hợp, quy ước giải phóng ghế, không trigger |
+| 2026-10-09 | Task 3 | Thêm mục 15: giao diện static 5 trang, design system, state management, thanh toán giả lập |
+| 2026-10-09 | Task 4 | Thêm mục 16: cấu trúc backend Express, connection pool MySQL, API phim/suất chiếu, xử lý lỗi an toàn |
+| 2026-10-09 | Task 5 | Thêm mục 17: Cập nhật giao diện gọi API /movies, xử lý trạng thái loading/error an toàn |
+| 2026-10-09 | Task 6 | Thêm mục 18: Viết API Booking sử dụng Transaction, khóa ghế an toàn chống đặt trùng |
+| 2026-10-09 | Task 7 | Thêm mục 19: API Thanh toán giả lập, thao tác lặp an toàn, nối luồng UI hoàn chỉnh |
