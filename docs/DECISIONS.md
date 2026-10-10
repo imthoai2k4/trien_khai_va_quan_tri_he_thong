@@ -432,6 +432,62 @@ Không dùng trigger để enforce quy tắc liên bảng (payment thất bại 
 - **`server_tokens off;`**: Ẩn phiên bản Nginx khỏi header `Server` và các trang mã lỗi mặc định.
 - **Xử lý lỗi 502/503/504:** Kích hoạt `proxy_intercept_errors on;` cùng với các named location (`@upstream_502`, `@upstream_503`, `@upstream_504`). Các trang lỗi trả về thông báo văn bản ngắn gọn, giữ nguyên HTTP status code, không để lộ đường dẫn tệp tin, tên container hay chi tiết kiến trúc nội bộ khi container `app` gặp sự cố.
 
+## 23. Quyết định Task 11 — Metrics ứng dụng và Prometheus
+
+### 23.1. Thiết kế Metrics ứng dụng
+- **Thư viện:** Sử dụng `prom-client` (^15.1.3) với `Registry` riêng biệt để quản lý tập trung và tránh xung đột metrics.
+- **Default Metrics:** Kích hoạt `collectDefaultMetrics` với tiền tố `nodejs_` để theo dõi tình trạng runtime (CPU user/system, memory resident/heap, garbage collection, event loop lag, open file descriptors).
+- **Custom Metrics:**
+  - `http_requests_total` (Counter): Theo dõi tổng số HTTP requests với labels `[method, route, status_code]`.
+  - `http_request_duration_seconds` (Histogram): Đo thời gian phản hồi HTTP request với các buckets `[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]` giây.
+  - `http_request_errors_total` (Counter): Theo dõi số phản hồi lỗi 4xx và 5xx với labels `[method, route, status_code, error_type]` (`error_type` phân loại `4xx` hoặc `5xx`).
+  - `movie_ticket_bookings_total` (Counter): Đếm số lượt tạo booking với label `[status]` (`pending` khi thành công, `conflict` khi trùng ghế 409, `bad_request` khi sai payload, `error` khi lỗi server).
+  - `movie_ticket_payments_total` (Counter): Đếm số lượt thanh toán với labels `[method, status]` (`status`: `success`, `failed`, `error`).
+
+### 23.2. Chống bùng nổ Cardinality và Bảo vệ dữ liệu nhạy cảm
+- **Chuẩn hóa Route Pattern:** Thay vì dùng URL thô (`/api/movies/1`), middleware trích xuất route template (`/api/movies/:id`, `/api/showtimes/:id/seats`). Các tài nguyên tĩnh được quy về `static_asset`, trang tĩnh là tên file HTML, và các URL không tồn tại được gán nhãn `not_found`.
+- **Chuẩn hóa Payment Method:** Giới hạn mảng phương thức hợp lệ (`credit_card`, `bank_transfer`, `e_wallet`, `cash`, `momo`, `vnpay`, `zalopay`), các giá trị lạ được quy về `other` hoặc `unknown`.
+- **Bảo mật tuyệt đối:** Không đưa bất kỳ thông tin định danh cá nhân (PII), email, token, user ID, booking code, số tiền, hay IP vào metric labels.
+- **Loại trừ Scrape Loop:** Endpoint `/metrics` được bỏ qua trong middleware để việc Prometheus định kỳ cào dữ liệu không làm tăng số lượng request của ứng dụng.
+
+### 23.3. Cấu hình Prometheus Scrape
+- **Phiên bản:** Image `prom/prometheus:v2.53.0` theo quyết định ở mục 10.
+- **Mạng & Cổng:** Mở cổng `9090:9090` ra host phục vụ demo/kiểm tra; kết nối nội bộ với ứng dụng qua mạng `tkpm_network`.
+- **Scrape Targets:**
+  - `movie-app`: Scrape `http://app:3000/metrics` mỗi 5 giây (`scrape_interval: 5s`) để cập nhật nhanh chóng trong quá trình demo.
+  - `prometheus`: Scrape `http://localhost:9090/metrics` mỗi 15 giây.
+- **Lưu trữ:** Dữ liệu chuỗi thời gian TSDB được lưu trên named volume `prometheus_data`.
+
+## 24. Quyết định Task 12 — Exporter và Grafana Dashboard
+
+### 24.1. cAdvisor (Giám sát tài nguyên Container)
+- **Phiên bản:** Image `gcr.io/cadvisor/cadvisor:v0.49.1` theo bảng ở mục 10.
+- **Mạng & Cổng:** Chỉ mở nội bộ qua mạng `tkpm_network` (`expose: 8080`), tuyệt đối không publish cổng ra ngoài host theo nguyên tắc bảo mật ở mục 8.
+- **Dữ liệu thu thập:** Mức tiêu thụ CPU, RAM, Network I/O (RX/TX) của từng container (`tkpm_app`, `tkpm_db`, `tkpm_nginx`, `tkpm_prometheus`, v.v.).
+
+### 24.2. mysqld-exporter (Giám sát cơ sở dữ liệu MySQL)
+- **Phiên bản:** Image `prom/mysqld-exporter:v0.15.1` theo bảng ở mục 10.
+- **Bảo mật xác thực:**
+  - Không hardcode mật khẩu vào file cấu hình commit git.
+  - Entrypoint động tạo file `.my.cnf` trong container lúc khởi động dựa trên các biến môi trường (`MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_HOST`).
+  - Cung cấp file mẫu `monitoring/mysql-exporter/my.cnf.example` làm tài liệu tham chiếu.
+- **Mạng & Cổng:** Chỉ mở nội bộ qua mạng `tkpm_network` (`expose: 9104`), không publish ra host.
+
+### 24.3. Grafana và Provisioning tự động
+- **Phiên bản:** Image `grafana/grafana:11.1.0` theo bảng ở mục 10.
+- **Mạng & Cổng:** Ánh xạ cổng `3001:3000` (truy cập tại `http://localhost:3001` trên host).
+- **Xác thực Admin:** Nạp thông tin đăng nhập từ biến môi trường `GF_SECURITY_ADMIN_USER` và `GF_SECURITY_ADMIN_PASSWORD` (từ file `.env`). Vô hiệu hóa tính năng tự đăng ký tài khoản (`GF_USERS_ALLOW_SIGN_UP=false`).
+- **Tự động cấu hình (Provisioning):**
+  - **Datasource:** Tự động tạo kết nối Prometheus (`http://prometheus:9090`) với UID `prometheus` làm nguồn dữ liệu mặc định.
+  - **Dashboard:** Tự động nạp dashboard "TKPM Cinema — Giám Sát Toàn Diện" (`tkpm-cinema-overview.json`) vào thư mục `TKPM Cinema`.
+  - **Cấu trúc Dashboard:** Gồm 8 thẻ chỉ số tổng quan (KPI) và 3 hàng biểu đồ chuyên biệt:
+    1. 🎬 *Ứng dụng & Nghiệp vụ:* Lưu lượng request theo route, tần suất lỗi 4xx/5xx, thời gian phản hồi (P50, P90, P95, P99), số đơn vé và giao dịch thanh toán.
+    2. 📦 *Tài nguyên Container:* Biểu đồ CPU, RAM, Network RX/TX của từng container từ cAdvisor.
+    3. 🗄️ *Cơ sở dữ liệu MySQL:* Tần suất truy vấn QPS, kết nối khách (threads connected & max used), lưu lượng mạng DB.
+
+### 24.4. Scrape Targets đầy đủ trong Prometheus
+Bổ sung scrape config cho `cadvisor:8080` và `mysqld-exporter:9104` vào `prometheus.yml`. Đảm bảo cả 4 targets (`movie-app`, `prometheus`, `cadvisor`, `mysql-exporter`) đều ở trạng thái `UP`.
+
 ---
 
 ## Lịch sử cập nhật
@@ -450,3 +506,5 @@ Không dùng trigger để enforce quy tắc liên bảng (payment thất bại 
 | 2026-10-09 | Task 8 | Thêm mục 20: JWT Authentication, phân quyền Admin và Dashboard quản trị cơ bản |
 | 2026-10-09 | Task 9 | Thêm mục 21: Kiến trúc Docker Compose, Reverse Proxy Nginx và Database Healthcheck |
 | 2026-10-10 | Task 10 | Thêm mục 22: Hardening Nginx, security headers, CSP, giới hạn request, xử lý lỗi upstream và HTTPS demo |
+| 2026-10-10 | Task 11 | Thêm mục 23: Triển khai prom-client, endpoint /metrics, custom metrics và Prometheus scrape |
+| 2026-10-10 | Task 12 | Thêm mục 24: Bổ sung cAdvisor, mysqld-exporter, Grafana dashboard provisioning và đồng bộ targets UP |

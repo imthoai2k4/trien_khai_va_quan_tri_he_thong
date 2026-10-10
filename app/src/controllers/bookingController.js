@@ -1,6 +1,7 @@
 'use strict';
 
 const db = require('../services/db');
+const { bookingsTotal } = require('../services/metrics');
 
 // Giả lập user_id cho DEMO (Vì chưa làm tính năng Auth)
 const DEMO_USER_ID = 1;
@@ -13,10 +14,12 @@ const bookingController = {
       const { showtime_id, seat_ids } = req.body;
 
       if (!showtime_id || !Array.isArray(seat_ids) || seat_ids.length === 0) {
+        bookingsTotal.inc({ status: 'bad_request' });
         return res.status(400).json({ error: 'Missing showtime_id or seat_ids' });
       }
 
       if (seat_ids.length > 8) {
+        bookingsTotal.inc({ status: 'bad_request' });
         return res.status(400).json({ error: 'Cannot book more than 8 seats at once' });
       }
 
@@ -27,6 +30,7 @@ const bookingController = {
         [showtime_id]
       );
       if (stRows.length === 0) {
+        bookingsTotal.inc({ status: 'not_found' });
         return res.status(404).json({ error: 'Showtime not found' });
       }
       const showtime = stRows[0];
@@ -43,11 +47,13 @@ const bookingController = {
       );
 
       if (seats.length !== seat_ids.length) {
+        bookingsTotal.inc({ status: 'bad_request' });
         return res.status(400).json({ error: 'Some seats do not exist' });
       }
 
       for (const seat of seats) {
         if (seat.room_id !== showtime.room_id) {
+          bookingsTotal.inc({ status: 'bad_request' });
           return res.status(400).json({ error: `Seat ${seat.id} does not belong to the correct room` });
         }
       }
@@ -77,13 +83,14 @@ const bookingController = {
         try {
           await connection.execute(
             `INSERT INTO booking_seats (booking_id, showtime_id, seat_id, price)
-             VALUES (?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?)`,
             [bookingId, showtime_id, seatId, showtime.price]
           );
         } catch (insertErr) {
           // Lỗi 1062: ER_DUP_ENTRY
           if (insertErr.code === 'ER_DUP_ENTRY') {
             await connection.rollback(); // Hủy toàn bộ thay đổi
+            bookingsTotal.inc({ status: 'conflict' });
             return res.status(409).json({ 
               error: 'Một hoặc nhiều ghế đã bị người khác đặt. Vui lòng chọn lại.' 
             });
@@ -95,6 +102,9 @@ const bookingController = {
 
       // COMMIT nếu mọi thứ suôn sẻ
       await connection.commit();
+
+      // Ghi nhận metric đặt vé thành công (pending thanh toán)
+      bookingsTotal.inc({ status: 'pending' });
 
       // Trả về kết quả thành công để frontend chuyển hướng sang checkout
       res.status(201).json({
@@ -108,6 +118,7 @@ const bookingController = {
       if (connection) {
         await connection.rollback();
       }
+      bookingsTotal.inc({ status: 'error' });
       next(err);
     } finally {
       if (connection) {

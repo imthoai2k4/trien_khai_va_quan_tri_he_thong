@@ -1,0 +1,16 @@
+# ==============================================================================
+# File mẫu cấu hình xác thực cho mysqld-exporter (Task 12).
+#
+# Không commit file .my.cnf thật chứa mật khẩu.
+# Khi triển khai qua Docker Compose, container mysqld-exporter tự động nạp
+# thông tin đăng nhập từ biến môi trường (MYSQL_ROOT_PASSWORD/MYSQL_PASSWORD).
+#
+# Nếu muốn chạy mysqld-exporter độc lập ngoài Docker:
+# copy my.cnf.example thành .my.cnf và cập nhật thông tin tương ứng:
+# ==============================================================================
+
+[client]
+user = root
+password = root
+host = db
+port = 3306

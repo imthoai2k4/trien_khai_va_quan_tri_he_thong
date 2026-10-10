@@ -1,0 +1,41 @@
+# Prometheus configuration — TKPM Cinema
+# Task 11 & Task 12: Giám sát toàn diện (App, Prometheus, cAdvisor, MySQL)
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # 1. Giám sát chính Prometheus
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # 2. Thu thập metrics từ Node.js Express App
+  - job_name: 'movie-app'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['app:3000']
+        labels:
+          service: 'movie-app'
+          environment: 'production'
+
+  # 3. Thu thập metrics tài nguyên container từ cAdvisor (Task 12)
+  - job_name: 'cadvisor'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'cadvisor'
+
+  # 4. Thu thập metrics cơ sở dữ liệu từ MySQL Exporter (Task 12)
+  - job_name: 'mysql-exporter'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['mysqld-exporter:9104']
+        labels:
+          service: 'mysql-exporter'

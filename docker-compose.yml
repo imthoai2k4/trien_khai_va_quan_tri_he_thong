@@ -81,8 +81,92 @@ services:
     networks:
       - tkpm_network
 
+  # 5. Prometheus Monitoring (Task 11)
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: tkpm_prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - tkpm_network
+
+  # 6. cAdvisor — Giám sát tài nguyên container (Task 12)
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: tkpm_cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    expose:
+      - "8080"
+    restart: unless-stopped
+    networks:
+      - tkpm_network
+
+  # 7. MySQL Exporter — Giám sát hiệu năng Database (Task 12)
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: tkpm_mysqld_exporter
+    environment:
+      - MYSQL_USER=${DB_USER:-root}
+      - MYSQL_PASSWORD=${DB_PASS:-root}
+      - MYSQL_HOST=db
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "[client]" > /tmp/.my.cnf
+        echo "user=$$MYSQL_USER" >> /tmp/.my.cnf
+        echo "password=$$MYSQL_PASSWORD" >> /tmp/.my.cnf
+        echo "host=$$MYSQL_HOST" >> /tmp/.my.cnf
+        echo "port=3306" >> /tmp/.my.cnf
+        exec /bin/mysqld_exporter --config.my-cnf=/tmp/.my.cnf --web.listen-address=:9104
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "9104"
+    restart: unless-stopped
+    networks:
+      - tkpm_network
+
+  # 8. Grafana — Dashboard trực quan hóa (Task 12)
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: tkpm_grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_DISABLE_BRUTE_FORCE_LOGIN_PROTECTION=true
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - tkpm_network
+
 volumes:
   db_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   tkpm_network:

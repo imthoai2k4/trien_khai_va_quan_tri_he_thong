@@ -1,0 +1,14 @@
+# Grafana Dashboards Provisioning — TKPM Cinema
+# Task 12: Tự động nạp dashboards JSON từ thư mục cấu hình
+
+apiVersion: 1
+
+providers:
+  - name: 'TKPM Cinema Dashboards'
+    orgId: 1
+    folder: 'TKPM Cinema'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

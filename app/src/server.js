@@ -13,6 +13,8 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const express = require('express');
 const apiRoutes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
+const metricsMiddleware = require('./middleware/metricsMiddleware');
+const { register } = require('./services/metrics');
 
 const app = express();
 
@@ -21,11 +23,24 @@ const HOST = process.env.APP_HOST || '0.0.0.0';
 
 app.disable('x-powered-by');
 
+// Middleware thu thập HTTP metrics (Task 11)
+app.use(metricsMiddleware);
+
 // Middleware parse JSON cho các request có body
 app.use(express.json());
 
 // Phục vụ giao diện tĩnh. Giao diện thật thuộc Task 3.
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Prometheus metrics endpoint (Task 11)
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  } catch (err) {
+    res.status(500).end(err.message);
+  }
+});
 
 // Chỉ dùng để kiểm tra tiến trình đã khởi động (không phải API nghiệp vụ).
 app.get('/healthz', (req, res) => {

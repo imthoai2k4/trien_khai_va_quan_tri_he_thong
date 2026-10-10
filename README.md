@@ -140,8 +140,8 @@ docker compose up --build
 |---|---|---|
 | `mysql`, `phpmyadmin` | Task 9 | MySQL 8 + quản trị dữ liệu; MySQL không public |
 | `nginx` | Task 9 / Task 10 ✅ | Reverse proxy, security headers, giới hạn request, xử lý lỗi proxy; HTTPS tự ký là tùy chọn (mục 9.2) |
-| `prometheus`, `prom-client` `/metrics` | Task 11 | Metrics HTTP request, latency, lỗi 4xx/5xx, booking/payment |
-| `grafana`, `cadvisor`, `mysqld-exporter` | Task 12 | Dashboard container, app, MySQL |
+| `prometheus`, `prom-client` `/metrics` | Task 11 ✅ | Metrics HTTP request, latency, lỗi 4xx/5xx, booking/payment; Prometheus chạy tại :9090 |
+| `grafana`, `cadvisor`, `mysqld-exporter` | Task 12 ✅ | Dashboard container, app, MySQL; Grafana chạy tại :3001, exporter nội bộ |
 | `loki`, `promtail` | Task 13 | Log tập trung, truy vấn LogQL |
 
 Lộ trình đầy đủ và ba commit mốc bắt buộc nằm trong `KE_HOACH_CHIA_TASK_CHO_AI_AGENT.md`.
@@ -152,8 +152,10 @@ Lộ trình đầy đủ và ba commit mốc bắt buộc nằm trong `KE_HOACH_
 |---|---|---|
 | Website (qua Nginx) | `http://localhost` | `https://localhost` |
 | phpMyAdmin | `http://localhost:8080` | — |
+| Prometheus | `http://localhost:9090` | — |
+| Grafana | `http://localhost:3001` | — |
 
-`Prometheus: http://localhost:9090` và `Grafana: http://localhost:3001` sẽ được bổ sung ở Task 11–12.
+`Loki / Promtail: thu thập log tập trung` sẽ được bổ sung ở Task 13.
 
 ### 9.1. Security headers và giới hạn request (Task 10)
 
@@ -247,6 +249,53 @@ docker compose restart nginx
 Vì chứng chỉ tự ký không được một tổ chức phát hành chứng chỉ (CA) công khai xác nhận, trình duyệt sẽ hiển thị cảnh báo như *"Your connection is not private"* / *"Not secure"* / `NET::ERR_CERT_AUTHORITY_INVALID`. Để tiếp tục demo, chọn **Advanced → Proceed to localhost (unsafe)**. Cảnh báo này chỉ nói rằng trình duyệt không xác minh được danh tính máy chủ; với demo cục bộ `localhost` thì kết nối vẫn được mã hóa. **Không dùng chứng chỉ này cho bất kỳ môi trường thật nào.**
 
 Nếu đã bật HTTPS rồi tắt, trình duyệt có thể còn ghi nhớ HSTS và tự chuyển sang `https://localhost`. Xóa ghi nhớ đó tại `chrome://net-internals/#hsts` (mục *Delete domain security policies*) rồi tải lại.
+
+### 9.3. Metrics ứng dụng và Prometheus (Task 11)
+
+- **Endpoint Metrics của App:** `http://localhost/metrics` (phục vụ qua Nginx) hoặc nội bộ `http://app:3000/metrics`.
+- **Giao diện quản trị Prometheus:** `http://localhost:9090`
+- **Trang kiểm tra Scrape Targets:** `http://localhost:9090/targets` (cả 2 target `movie-app` và `prometheus` đều có trạng thái `UP`).
+
+**Các metrics nghiệp vụ và hạ tầng chính:**
+- `http_requests_total`: Tổng số lượt gọi HTTP request phân theo `[method, route, status_code]`.
+- `http_request_duration_seconds`: Histogram thời gian phản hồi với các bucket từ 5ms đến 10s.
+- `http_request_errors_total`: Đếm lỗi HTTP 4xx và 5xx theo `[method, route, status_code, error_type]`.
+- `movie_ticket_bookings_total`: Đếm số lượt tạo đơn vé theo `[status]` (`pending`, `conflict`, `bad_request`, `error`).
+- `movie_ticket_payments_total`: Đếm số lượt thanh toán theo `[method, status]` (`status`: `success`, `failed`, `error`).
+- Metrics Node.js runtime mặc định: CPU usage (`nodejs_process_cpu_user_seconds_total`), RAM/Heap (`nodejs_process_resident_memory_bytes`, `nodejs_process_heap_bytes`), Event loop lag (`nodejs_eventloop_lag_seconds`), v.v.
+
+**Một số câu truy vấn PromQL hữu ích:**
+
+```promql
+# Tần suất request mỗi giây (RPS) trên toàn hệ thống
+sum(rate(http_requests_total[1m]))
+
+# Tần suất request theo từng route (đã chuẩn hóa template, không lộ ID)
+sum by (route) (rate(http_requests_total[1m]))
+
+# Tỉ lệ lỗi 4xx/5xx trên toàn hệ thống
+sum(rate(http_request_errors_total[1m]))
+
+# Thời gian phản hồi phân vị 95 (P95 latency)
+histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))
+
+# Tổng số đơn đặt vé đang chờ thanh toán
+movie_ticket_bookings_total{status="pending"}
+
+# Tỉ lệ thanh toán thành công vs thất bại
+sum by (status) (movie_ticket_payments_total)
+```
+
+### 9.4. Dashboard giám sát Grafana (Task 12)
+
+- **Địa chỉ truy cập:** `http://localhost:3001`
+- **Tài khoản đăng nhập:** Thiết lập trong file `.env` (mặc định: `admin` / cấu hình qua `GRAFANA_ADMIN_PASSWORD`).
+- **Dashboard tự động (Provisioned):** Vào menu **Dashboards → TKPM Cinema → TKPM Cinema — Giám Sát Toàn Diện** (hoặc truy cập trực tiếp `http://localhost:3001/d/tkpm-cinema-overview`).
+- **Nội dung hiển thị trên Dashboard:**
+  1. **Thẻ chỉ số tổng quan (KPI):** Uptime hệ thống, tổng lượt gọi HTTP, tỉ lệ lỗi HTTP (%), P95 Latency, đơn vé chờ thanh toán, thanh toán thành công, trạng thái MySQL (UP/DOWN), số kết nối đang hoạt động.
+  2. **Ứng dụng & Nghiệp vụ (Express):** Lưu lượng request theo từng route (RPS), tần suất lỗi 4xx/5xx, thời gian phản hồi theo percentiles (P50/P90/P95/P99), số vé đặt theo trạng thái, số giao dịch theo phương thức và trạng thái.
+  3. **Tài nguyên Container (cAdvisor):** Mức dùng CPU (%), RAM (bytes), lưu lượng mạng (RX/TX bytes/sec) của từng container (`tkpm_app`, `tkpm_db`, `tkpm_nginx`, `tkpm_prometheus`, `tkpm_cadvisor`, `tkpm_mysqld_exporter`, `tkpm_grafana`).
+  4. **Cơ sở dữ liệu MySQL (mysqld-exporter):** Tần suất truy vấn mỗi giây (QPS), số kết nối khách (threads & max used), băng thông mạng MySQL.
 
 ## 10. Lưu ý bảo mật
 
