@@ -159,6 +159,44 @@ services:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
+      - loki
+    restart: unless-stopped
+    networks:
+      - tkpm_network
+
+  # 9. Loki — Kho lưu trữ log tập trung (Task 13)
+  loki:
+    image: grafana/loki:3.1.0
+    container_name: tkpm_loki
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./logging/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    # CHỈ mở nội bộ trong tkpm_network: Promtail đẩy log vào, Grafana đọc ra.
+    # Tuyệt đối không publish cổng 3100 ra host (docs/DECISIONS.md mục 8).
+    expose:
+      - "3100"
+    restart: unless-stopped
+    networks:
+      - tkpm_network
+
+  # 10. Promtail — Thu thập log container và đẩy về Loki (Task 13)
+  promtail:
+    image: grafana/promtail:3.1.0
+    container_name: tkpm_promtail
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./logging/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      # Đọc log qua Docker API. Mount read-only để Promtail không thể điều
+      # khiển Docker daemon. Trên Docker Desktop cho Windows, đây là cách duy
+      # nhất truy cập được log container (thư mục log thật nằm trong máy ảo).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Ghi nhớ vị trí đã đọc của từng container, tránh đọc lại toàn bộ lịch
+      # sử log mỗi khi Promtail được tạo lại.
+      - promtail_positions:/var/promtail
+    # Không expose cổng: Promtail chỉ hoạt động theo chiều đẩy log sang Loki.
+    depends_on:
+      - loki
     restart: unless-stopped
     networks:
       - tkpm_network
@@ -167,6 +205,8 @@ volumes:
   db_data:
   prometheus_data:
   grafana_data:
+  loki_data:
+  promtail_positions:
 
 networks:
   tkpm_network:

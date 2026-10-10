@@ -1,0 +1,71 @@
+# ==============================================================================
+# Loki — Kho lưu trữ log tập trung (Task 13)
+# Image cố định: grafana/loki:3.1.0 (docs/DECISIONS.md mục 10)
+#
+# Chế độ chạy: single binary / standalone, phù hợp môi trường Docker cục bộ.
+# File này được mount vào container tại /etc/loki/local-config.yaml (read-only).
+# ==============================================================================
+
+# Demo cục bộ không cần multi-tenant: tắt xác thực để Promtail và Grafana
+# không phải gửi kèm header tổ chức (X-Scope-OrgID).
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+# Cấu hình dùng chung cho mọi thành phần (single binary).
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+# Schema TSDB lưu trên filesystem — cấu hình khuyến nghị cho Loki 3.x.
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Giữ log 7 ngày (168h) rồi tự động xóa — đủ cho môi trường demo/học tập,
+  # tránh volume loki_data phình vô hạn.
+  retention_period: 168h
+  # Từ chối bản ghi cũ hơn retention (mặc định đã bật) — chặn Promtail đẩy
+  # log cũ trở lại sau khi vùng dữ liệu đã bị xoá.
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # Cho phép Grafana hiển thị biểu đồ mật độ log (log volume).
+  volume_enabled: true
+
+# Compactor chịu trách nhiệm gộp index và THỰC THI retention.
+# Từ Loki 3.0, khi retention_enabled = true bắt buộc khai báo delete_request_store.
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+  delete_request_store: filesystem
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+
+# Không gửi số liệu thống kê sử dụng về Grafana Labs.
+analytics:
+  reporting_enabled: false

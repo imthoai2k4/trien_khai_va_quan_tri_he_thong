@@ -1,0 +1,136 @@
+# ==============================================================================
+# Promtail — Thu thập log container và đẩy về Loki (Task 13)
+# Image cố định: grafana/promtail:3.1.0 (docs/DECISIONS.md mục 10)
+#
+# File này được mount vào container tại /etc/promtail/config.yml (read-only).
+#
+# Cách thu thập log: dùng Docker service discovery (docker_sd_configs) đọc log
+# trực tiếp qua Docker API (/var/run/docker.sock) thay vì đọc file
+# /var/lib/docker/containers/*/*-json.log. Trên Docker Desktop cho Windows,
+# thư mục log thật nằm trong máy ảo Linux nên KHÔNG mount được vào container;
+# đọc qua Docker API là cách tương thích và ổn định trên mọi nền tảng.
+# ==============================================================================
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+# Lưu vị trí đã đọc (mốc thời gian log cuối cùng của mỗi container) để không
+# mất log hoặc đẩy trùng log sau khi Promtail khởi động lại. Đặt trên named
+# volume (xem docker-compose.yml) thay vì /tmp để vị trí không mất khi container
+# được tạo lại — nhờ đó Promtail không đọc lại toàn bộ lịch sử log của các
+# container đã chạy lâu.
+positions:
+  filename: /var/promtail/positions.yaml
+
+# Đích đến: endpoint nội bộ của Loki trong mạng tkpm_network.
+# Loki không publish cổng ra host (docs/DECISIONS.md mục 8).
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+        # Chỉ thu thập container thuộc đúng project Docker Compose này,
+        # tránh lẫn log của các container không liên quan trên máy.
+        filters:
+          - name: label
+            values: ["com.docker.compose.project=tkpm"]
+
+    relabel_configs:
+      # Lưu ý về cú pháp: Promtail dùng lại engine relabel của Prometheus nên
+      # mọi `regex` được NEO HAI ĐẦU (^...$) trước khi so khớp. Vì vậy các mẫu
+      # dưới đây viết `/?` để chấp nhận cả hai dạng tên container mà Docker API
+      # có thể trả về: có dấu "/" ở đầu ("/tkpm_app") hoặc không ("tkpm_app").
+
+      # ----------------------------------------------------------------------
+      # 1. KHÔNG dùng `action: drop` ở đây.
+      #    Đã kiểm chứng thực tế: khi một target bị `drop`, Docker target của
+      #    Promtail KHÔNG loại bỏ target đó mà tạo ra một target với tập nhãn
+      #    RỖNG. Loki từ chối stream không có nhãn nào ("at least one label pair
+      #    is required per stream"), khiến Promtail ghi log lỗi, log lỗi này lại
+      #    bị chính nó thu thập và đẩy lên -> vòng lặp lỗi 1 giây/lần và mọi
+      #    batch log đều bị mất.
+      #    Vì vậy log của chính Promtail cũng được thu thập và gắn nhãn bình
+      #    thường (service="promtail"): vừa tránh lỗi, vừa giúp quan sát chính
+      #    pipeline log trên Grafana.
+      # ----------------------------------------------------------------------
+
+      # ----------------------------------------------------------------------
+      # 2. Nhãn `container`: tên container thật (bỏ dấu "/" ở đầu do Docker
+      #    API trả về, ví dụ "/tkpm_app" -> "tkpm_app").
+      #    Mẫu `[^/]+` khớp mọi tên container nên KHÔNG stream nào bị rỗng nhãn
+      #    (Loki từ chối stream không có nhãn nào).
+      # ----------------------------------------------------------------------
+      - source_labels: ['__meta_docker_container_name']
+        regex: '^/?([^/]+)$'
+        target_label: 'container'
+
+      # ----------------------------------------------------------------------
+      # 3. Nhãn `service` — phân tách log theo dịch vụ nghiệp vụ (yêu cầu Task 13).
+      #    Đây là các nhãn dùng trực tiếp trong câu truy vấn LogQL, ví dụ:
+      #    {service="movie-app"}, {service="nginx"}, {service="mysql"}.
+      # ----------------------------------------------------------------------
+      - source_labels: ['__meta_docker_container_name']
+        regex: '^/?tkpm_app$'
+        target_label: 'service'
+        replacement: 'movie-app'
+
+      - source_labels: ['__meta_docker_container_name']
+        regex: '^/?tkpm_nginx$'
+        target_label: 'service'
+        replacement: 'nginx'
+
+      - source_labels: ['__meta_docker_container_name']
+        regex: '^/?tkpm_db$'
+        target_label: 'service'
+        replacement: 'mysql'
+
+      # ----------------------------------------------------------------------
+      # 4. Các container hạ tầng còn lại (prometheus, grafana, cadvisor,
+      #    mysqld_exporter, phpmyadmin, loki): gán service theo tên container
+      #    để mọi log đều có nhãn service nhất quán.
+      #    Rule này CHỈ áp dụng khi `service` còn rỗng (chuỗi nối bắt đầu bằng
+      #    dấu ";") — nhờ vậy không ghi đè 3 ánh xạ ở bước 3.
+      # ----------------------------------------------------------------------
+      - source_labels: ['service', '__meta_docker_container_name']
+        regex: '^;/?tkpm_(.+)$'
+        target_label: 'service'
+
+      # ----------------------------------------------------------------------
+      # 5. Bảo hiểm cuối: nếu vì bất kỳ lý do gì container chưa có nhãn
+      #    `service`, gán "unknown" để không bao giờ tồn tại stream rỗng nhãn.
+      # ----------------------------------------------------------------------
+      - source_labels: ['service']
+        regex: '^$'
+        target_label: 'service'
+        replacement: 'unknown'
+
+    pipeline_stages:
+      # ----------------------------------------------------------------------
+      # Chỉ bóc tách JSON cho log của ứng dụng đặt vé. Log của Nginx và MySQL
+      # là văn bản thuần, nếu đưa qua stage `json` sẽ bị loại bỏ.
+      #
+      # `level` và `type` trở thành nhãn của stream, cho phép truy vấn nhanh
+      # như {service="movie-app", level="error"} hoặc
+      # {service="movie-app", type="booking_event"}.
+      #
+      # Lưu ý: ứng dụng LUÔN ghi log dạng JSON (app/src/services/logger.js) nên
+      # mọi dòng log nghiệp vụ đều parse được. Một dòng không phải JSON do
+      # container app phát ra (ví dụ vết lỗi khi tiến trình Node bị kill) sẽ bị
+      # stage này loại bỏ — khi đó vẫn xem được bằng `docker logs tkpm_app`.
+      # ----------------------------------------------------------------------
+      - match:
+          selector: '{service="movie-app"}'
+          stages:
+            - json:
+                expressions:
+                  level: level
+                  type: type
+                  msg: msg
+            - labels:
+                level:
+                type:

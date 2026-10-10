@@ -14,7 +14,9 @@ const express = require('express');
 const apiRoutes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
 const metricsMiddleware = require('./middleware/metricsMiddleware');
+const requestLogger = require('./middleware/requestLogger');
 const { register } = require('./services/metrics');
+const logger = require('./services/logger');
 
 const app = express();
 
@@ -22,6 +24,13 @@ const PORT = Number(process.env.APP_PORT) || 3000;
 const HOST = process.env.APP_HOST || '0.0.0.0';
 
 app.disable('x-powered-by');
+
+// Mọi request từ bên ngoài đều đi qua đúng một lớp proxy là Nginx, nên tin
+// tưởng 1 hop để `req.ip` trả về IP thật của khách (Nginx đặt X-Forwarded-For).
+app.set('trust proxy', 1);
+
+// Middleware ghi log HTTP request có cấu trúc (Task 13)
+app.use(requestLogger);
 
 // Middleware thu thập HTTP metrics (Task 11)
 app.use(metricsMiddleware);
@@ -63,9 +72,7 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 app.listen(PORT, HOST, () => {
-  console.log(
-    JSON.stringify({ level: 'info', msg: 'server listening', host: HOST, port: PORT })
-  );
+  logger.systemEvent({ msg: 'server listening', host: HOST, port: PORT });
 });
 
 module.exports = app;

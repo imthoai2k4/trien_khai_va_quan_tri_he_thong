@@ -488,6 +488,87 @@ Không dùng trigger để enforce quy tắc liên bảng (payment thất bại 
 ### 24.4. Scrape Targets đầy đủ trong Prometheus
 Bổ sung scrape config cho `cadvisor:8080` và `mysqld-exporter:9104` vào `prometheus.yml`. Đảm bảo cả 4 targets (`movie-app`, `prometheus`, `cadvisor`, `mysql-exporter`) đều ở trạng thái `UP`.
 
+## 25. Quyết định Task 13 — Loki, Promtail và Structured Logging
+
+### 25.1. Kiến trúc logging tập trung
+
+- **Luồng dữ liệu:** Ứng dụng/Nginx/MySQL ghi log ra stdout/stderr → Docker giữ container log → **Promtail** thu thập và gắn nhãn → đẩy về **Loki** → **Grafana** truy vấn bằng LogQL.
+- **Phiên bản cố định:** `grafana/loki:3.1.0` và `grafana/promtail:3.1.0` (theo bảng ở mục 10).
+- **Cổng:** Loki chỉ `expose: 3100` trong `tkpm_network`, **không publish ra host**; Promtail không mở cổng nào (chỉ đẩy dữ liệu đi). Đúng nguyên tắc ở mục 8 — log chỉ được xem qua Grafana.
+
+### 25.2. Cấu hình Loki (`logging/loki/loki-config.yml`)
+
+- Chạy **single binary/standalone**: `auth_enabled: false` (demo cục bộ, không cần multi-tenant), HTTP port `3100`.
+- **Lưu trữ:** schema `v13` + `store: tsdb` trên `filesystem` (`/loki/chunks`, `/loki/rules`), volume `loki_data`.
+- **Retention:** `retention_period: 168h` (7 ngày) — đủ cho demo, tránh volume phình vô hạn. Kèm `reject_old_samples` để không nhận lại log cũ hơn hạn lưu.
+- **Compactor:** bật `retention_enabled: true` để thực thi việc xoá log hết hạn; từ Loki 3.0 bắt buộc khai báo `delete_request_store: filesystem` khi bật retention.
+- **Tắt** `analytics.reporting_enabled` (không gửi thống kê ra ngoài).
+
+### 25.3. Cấu hình Promtail (`logging/promtail/promtail-config.yml`)
+
+- **Cách thu thập:** dùng `docker_sd_configs` đọc log qua Docker API (`/var/run/docker.sock`, mount read-only) thay vì đọc file `/var/lib/docker/containers/*/*-json.log`. Trên **Docker Desktop cho Windows**, thư mục log thật nằm trong máy ảo Linux nên không thể mount vào container — đọc qua Docker API là cách duy nhất hoạt động trên mọi nền tảng.
+- **Lọc theo project:** chỉ thu thập container có nhãn `com.docker.compose.project=tkpm`, tránh lẫn log của container khác trên máy.
+- **Ánh xạ nhãn `service`** (yêu cầu của Task 13): `tkpm_app → movie-app`, `tkpm_nginx → nginx`, `tkpm_db → mysql`; các container hạ tầng còn lại nhận `service` theo tên (prometheus, grafana, cadvisor, mysqld_exporter, pma, loki, promtail). Regex viết dạng `^/?...$` để chấp nhận cả hai dạng tên container mà Docker API có thể trả về (có hoặc không có dấu `/` ở đầu). Promtail dùng engine relabel của Prometheus nên **mọi regex đều được neo hai đầu**.
+- **Nhãn bổ sung cho ứng dụng:** stage `json` (đặt trong `match` theo `service="movie-app"`) trích `level` và `type` thành nhãn stream, cho phép truy vấn nhanh `{service="movie-app", level="error"}`. Log của Nginx/MySQL là văn bản thuần nên **không** đi qua stage này (đưa vào `json` sẽ bị loại bỏ).
+- **Vị trí đọc (`positions`)** đặt trên named volume `promtail_positions` thay vì `/tmp`: container được tạo lại vẫn nhớ mốc log đã đọc, không đọc lại toàn bộ lịch sử log của các container chạy lâu.
+
+### 25.4. Bài học bắt buộc: KHÔNG dùng `action: drop` trong relabel của Promtail
+
+Đã kiểm chứng bằng thực nghiệm (bắt trực tiếp payload Promtail gửi lên Loki và giải mã):
+
+- Khi một target bị `action: drop`, **Docker target của Promtail KHÔNG loại bỏ target đó** mà tạo ra một target với **tập nhãn rỗng** (`{}`).
+- Loki từ chối stream không có nhãn nào: `error at least one label pair is required per stream` (HTTP 400).
+- Hệ quả dây chuyền: mọi batch chứa stream rỗng đều bị loại (log hợp lệ đi kèm cũng mất) → Promtail ghi log lỗi → **chính log lỗi đó lại bị Promtail thu thập và đẩy lên** → vòng lặp lỗi 1 giây/lần không dừng.
+- **Quyết định:** không dùng `drop`/`keep` trong `relabel_configs`. Log của chính Promtail cũng được thu thập và gắn nhãn bình thường (`service="promtail"`), vừa tránh lỗi vừa giúp quan sát chính pipeline log.
+
+### 25.5. Structured logging trong ứng dụng Express (`app/src/services/logger.js`)
+
+- Mọi log ghi ra stdout/stderr dưới dạng **một dòng JSON** (JSON Lines). Bốn loại log theo yêu cầu Task 13, cộng thêm `system_event` cho thông báo khởi động:
+
+| `type` | Phát sinh từ | Trường chính |
+|--------|--------------|--------------|
+| `http_request` | `middleware/requestLogger.js` (sau khi response kết thúc) | `method`, `path`, `status`, `duration_ms`, `ip`, `error_type` (chỉ khi ≥ 400) |
+| `booking_event` | `controllers/bookingController.js`, `paymentController.js` | `booking_id`, `showtime_id`, `seat_count`, `status` (pending/confirmed/failed), `reason` khi thất bại |
+| `payment_event` | `controllers/paymentController.js` | `payment_id`, `booking_id`, `method`, `amount`, `status` (success/failed), `reason` khi thất bại |
+| `system_error` | `middleware/errorHandler.js`, `services/db.js` | `msg`, `path`, `method`, `error_code`, `stack` |
+| `system_event` | `server.js`, `services/db.js` | `msg` + thông tin vận hành |
+
+- **`level` tự suy ra:** 2xx/3xx = `info`, 4xx = `warn`, 5xx = `error`; log lỗi/cảnh báo ghi ra **stderr** (Docker thu cả hai luồng nên Promtail vẫn đọc đủ).
+- **Bảo mật — nguyên tắc bất di bất dịch:** hàm `sanitize()` duyệt đệ quy payload và thay mọi khoá khớp `pass|pwd|secret|token|authorization|cookie|session|jwt|api-key|cvv|card|otp|hash|credential` bằng `[REDACTED]`, nên quy tắc "không log mật khẩu/token/secret/số thẻ/CVV" được **thi hành ở tầng code**, không chỉ ở quy ước. Logger cũng tự sinh `timestamp`/`level`/`service` và **không cho payload ghi đè**.
+- **Không ghi body, query string, header hay cookie** trong log request: chỉ ghi pathname (đã cắt `?...`) — tránh lộ mật khẩu/token và giữ truy vấn ổn định.
+- **Bỏ qua `/metrics`** trong `requestLogger` (đồng bộ với `metricsMiddleware` ở mục 23.2): Prometheus cào mỗi 5 giây, ghi log mỗi lần cào sẽ làm ngập Loki mà không có giá trị nghiệp vụ.
+- **`app.set('trust proxy', 1)`:** mọi request đều qua đúng một lớp proxy là Nginx, nhờ đó `ip` trong log là IP thật của khách thay vì IP container của Nginx.
+- **Lỗi parse JSON body** (`entity.parse.failed`) chỉ ghi thông báo chung, không ghi `err.message`: message của body-parser chứa trích đoạn body thô nên có thể lộ mật khẩu nếu client gửi payload đăng nhập sai định dạng. Phản hồi cho client cũng được thay bằng thông báo chung.
+
+### 25.6. Grafana provisioning datasource Loki
+
+- `monitoring/grafana/provisioning/datasources/datasources.yml` khai báo thêm datasource `Loki` (type `loki`), `url: http://loki:3100`, `uid: loki`, `editable: true`. Prometheus vẫn là datasource mặc định (`isDefault: true`).
+- `grafana` `depends_on` thêm `loki` để datasource sẵn sàng ngay khi Grafana khởi động.
+
+### 25.7. Nhãn do Loki tự bổ sung (không phải do Promtail cấu hình)
+
+Loki 3.x tự thêm hai nhãn khi nhận log — đã kiểm chứng bằng cách đẩy thử một stream thủ công:
+
+- `service_name`: sao chép từ nhãn `service` của stream (tính năng service-name discovery của Loki).
+- `detected_level`: mức log Loki tự suy ra từ nội dung dòng log.
+
+Hai nhãn này không làm tăng cardinality đáng kể và hữu ích khi lọc, nên giữ nguyên mặc định.
+
+### 25.8. Truy vấn LogQL minh chứng
+
+Đã chạy và xác nhận qua Grafana Explore (datasource `Loki`):
+
+| # | Mục đích | Truy vấn |
+|---|----------|----------|
+| 1 | Toàn bộ log ứng dụng đặt vé | `{service="movie-app"}` |
+| 2 | Lỗi hệ thống / HTTP ≥ 400 | `{service="movie-app"} \|= "error"` và `{service="movie-app"} \| json \| status >= 400` |
+| 3 | Sự kiện nghiệp vụ | `{service="movie-app"} \| json \| type="booking_event"` và `{service="movie-app"} \| json \| type="payment_event"` |
+
+Truy vấn bổ sung: `{service="nginx"}`, `{service="mysql"}`, `{service="movie-app", level="error"}`,
+`sum by (service) (count_over_time({service=~".+"}[1m]))`.
+
+> **Ghi chú vận hành:** container `tkpm_db` chỉ sinh log khi MySQL thực sự ghi sự kiện (khởi động, cảnh báo, lỗi). Khi hệ thống chạy êm, `{service="mysql"}` không có dòng nào là **đúng**, không phải lỗi cấu hình.
+
 ---
 
 ## Lịch sử cập nhật
@@ -508,3 +589,4 @@ Bổ sung scrape config cho `cadvisor:8080` và `mysqld-exporter:9104` vào `pro
 | 2026-10-10 | Task 10 | Thêm mục 22: Hardening Nginx, security headers, CSP, giới hạn request, xử lý lỗi upstream và HTTPS demo |
 | 2026-10-10 | Task 11 | Thêm mục 23: Triển khai prom-client, endpoint /metrics, custom metrics và Prometheus scrape |
 | 2026-10-10 | Task 12 | Thêm mục 24: Bổ sung cAdvisor, mysqld-exporter, Grafana dashboard provisioning và đồng bộ targets UP |
+| 2026-10-10 | Task 13 | Thêm mục 25: Loki + Promtail, nhãn `service` cho app/nginx/mysql, JSON structured logging có sanitize bí mật, datasource Loki cho Grafana và 3 truy vấn LogQL minh chứng |

@@ -1,0 +1,110 @@
+================================================================================
+               HỆ THỐNG ĐẶT VÉ XEM PHIM - TKPM CINEMA
+                    DANH SÁCH TẤT CẢ CÁC LINK TRUY CẬP
+================================================================================
+
+I. GIAO DIỆN NGƯỜI DÙNG & WEBSITE (Qua Nginx Reverse Proxy)
+--------------------------------------------------------------------------------
+1. Trang chủ / Danh sách phim:
+   http://localhost/
+   hoặc: http://localhost/index.html
+
+2. Trang chi tiết phim & chọn suất chiếu:
+   http://localhost/movie.html?id=1
+   (Thay id=1, 2, 3... tương ứng với từng phim)
+
+3. Trang sơ đồ chọn ghế:
+   http://localhost/seats.html
+
+4. Trang xác nhận đơn hàng & chọn phương thức thanh toán:
+   http://localhost/checkout.html
+
+5. Trang kết quả đặt vé / thông tin vé:
+   http://localhost/result.html
+
+6. Trang đăng nhập & Bảng điều khiển Quản trị viên (Admin):
+   http://localhost/admin.html
+   - Tài khoản mẫu 1 (Admin):  admin@demo.com  /  Admin@123
+   - Tài khoản mẫu 2 (User):   user@demo.com   /  User@123
+   - Tài khoản mẫu 3 (User):   binh@demo.com   /  User@123
+
+* Tuỳ chọn HTTPS (khi đã bật chứng chỉ tự ký theo hướng dẫn mục 9.2 README):
+   https://localhost/
+
+
+II. CÔNG CỤ QUẢN TRỊ & GIÁM SÁT HỆ THỐNG (Monitoring & Database Tools)
+--------------------------------------------------------------------------------
+1. Grafana Dashboard (Trực quan hoá hệ thống toàn diện):
+   http://localhost:3001/
+   - Tài khoản đăng nhập:
+     + Username: admin
+     + Password: admin
+   - Link trực tiếp tới Dashboard dự án:
+     http://localhost:3001/d/tkpm-cinema-overview
+
+2. Prometheus Web UI (Hệ thống thu thập Metrics):
+   http://localhost:9090/
+   - Link kiểm tra trạng thái các dịch vụ (Trang minh chứng 4/4 Targets UP):
+     http://localhost:9090/targets
+   - Link truy vấn đồ thị / PromQL:
+     http://localhost:9090/graph
+
+3. phpMyAdmin (Quản trị cơ sở dữ liệu MySQL qua web):
+   http://localhost:8080/
+   - Server:   db
+   - Username: root
+   - Password: root
+
+
+III. BACKEND API & METRICS ENDPOINTS
+--------------------------------------------------------------------------------
+1. Kiểm tra trạng thái tiến trình (Healthcheck):
+   http://localhost/healthz
+
+2. Endpoint cung cấp Prometheus Metrics của App:
+   http://localhost/metrics
+
+3. Danh sách phim (REST API):
+   http://localhost/api/movies
+   http://localhost/api/movies?status=now_showing
+   http://localhost/api/movies?status=coming_soon
+
+4. Chi tiết một bộ phim (REST API):
+   http://localhost/api/movies/1
+
+5. Danh sách suất chiếu theo phim (REST API):
+   http://localhost/api/movies/1/showtimes
+
+6. Sơ đồ ghế và trạng thái ghế theo suất chiếu (REST API):
+   http://localhost/api/showtimes/1/seats
+
+
+IV. HỆ THỐNG LOG TẬP TRUNG (Centralized Logging - Loki & Promtail)
+--------------------------------------------------------------------------------
+* Loki và Promtail KHÔNG mở cổng ra host (chỉ chạy trong mạng nội bộ), nên toàn
+  bộ log được xem và truy vấn gián tiếp qua Grafana Explore:
+
+  http://localhost:3001/explore
+  - Đăng nhập: admin / admin
+  - Chọn datasource: Loki
+  - Dán truy vấn LogQL vào ô Query rồi bấm "Run query"
+
+* Các câu truy vấn LogQL mẫu (minh chứng Task 13):
+  1. Toàn bộ log ứng dụng đặt vé:
+     {service="movie-app"}
+
+  2. Lọc lỗi hệ thống / HTTP >= 400:
+     {service="movie-app"} |= "error"
+     {service="movie-app"} | json | status >= 400
+
+  3. Sự kiện nghiệp vụ Đặt vé / Thanh toán:
+     {service="movie-app"} | json | type="booking_event"
+     {service="movie-app"} | json | type="payment_event"
+
+  4. Truy vấn bổ sung:
+     {service="nginx"}                                              (log Nginx)
+     {service="mysql"}                                              (log MySQL)
+     {service="movie-app", level="error"}                           (chỉ log lỗi)
+     sum by (service) (count_over_time({service=~".+"}[1m]))        (mật độ log)
+
+================================================================================

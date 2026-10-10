@@ -1,5 +1,6 @@
 # Grafana Datasources Provisioning — TKPM Cinema
-# Task 12: Tự động nạp Prometheus làm datasource mặc định
+# Task 12: Tự động nạp Prometheus làm datasource mặc định (metrics)
+# Task 13: Bổ sung Loki làm datasource thứ hai (log tập trung)
 
 apiVersion: 1
 
@@ -11,3 +12,14 @@ datasources:
     isDefault: true
     editable: true
     uid: prometheus
+
+  # Loki nhận log từ Promtail. `uid: loki` là mã cố định để có thể tham chiếu
+  # datasource này từ dashboard/tài liệu mà không phụ thuộc ID sinh tự động.
+  # Grafana truy cập Loki qua mạng nội bộ tkpm_network — Loki không publish
+  # cổng ra host (docs/DECISIONS.md mục 8).
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    uid: loki

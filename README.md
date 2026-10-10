@@ -2,9 +2,9 @@
 
 Website đặt vé xem phim: xem phim, xem suất chiếu, chọn ghế, đặt vé và thanh toán giả lập; kèm trang quản trị cơ bản cho admin. Đây là đồ án môn học, được triển khai độc lập bằng Docker Compose.
 
-> **Trạng thái hiện tại: hoàn thành Task 10 — hardening Nginx & cấu hình vận hành.**
-> Hệ thống chạy đầy đủ qua Docker Compose: MySQL, Express (API phim/suất chiếu/đặt vé/thanh toán giả lập/đăng nhập), giao diện tĩnh và Nginx reverse proxy đã được gia cố security headers, giới hạn request/timeout và xử lý lỗi proxy an toàn.
-> **Chưa có** HTTPS mặc định (là tùy chọn demo — xem mục 9.2), và **chưa có** monitoring (`/metrics`, Prometheus, Grafana) hay logging tập trung (Loki/Promtail) — thuộc Task 11–13.
+> **Trạng thái hiện tại: hoàn thành Task 13 — logging tập trung với Loki & Promtail.**
+> Hệ thống chạy đầy đủ qua Docker Compose: MySQL, Express (API phim/suất chiếu/đặt vé/thanh toán giả lập/đăng nhập), giao diện tĩnh, Nginx reverse proxy đã gia cố security headers/giới hạn request/xử lý lỗi proxy, **monitoring** (Prometheus + cAdvisor + mysqld-exporter + Grafana dashboard) và **logging tập trung** (Loki + Promtail + JSON structured logging, truy vấn bằng LogQL trên Grafana Explore).
+> **Chưa có** HTTPS mặc định (là tùy chọn demo — xem mục 9.2).
 
 ---
 
@@ -21,12 +21,12 @@ Ràng buộc nghiệp vụ quan trọng: **một ghế chỉ được bán một
 | Backend | Node.js 20 LTS + Express 4 | Đã khai báo dependency |
 | Giao diện | HTML/CSS/JS tĩnh do Express phục vụ (không React/Vue) | Mới có trang giữ chỗ |
 | Cơ sở dữ liệu | MySQL 8, driver `mysql2`, SQL tham số hóa (không ORM) | Chưa triển khai |
-| Xác thực | `express-session` + `bcryptjs`, role `user`/`admin` | Chưa triển khai |
-| Metrics | `prom-client` (`GET /metrics`) | Chưa triển khai |
+| Xác thực | JWT (`jsonwebtoken`) + `bcryptjs`, role `user`/`admin` | Đã triển khai (Task 8) |
+| Metrics | `prom-client` (`GET /metrics`) | Đã triển khai (Task 11) |
 | Reverse proxy | Nginx (điểm truy cập công khai duy nhất) | Đã triển khai + hardening Task 10 |
-| Triển khai | Docker + Docker Compose | Mới có compose khung |
-| Quan sát | Prometheus, Grafana, cAdvisor, mysqld-exporter | Chưa triển khai |
-| Logging | Loki + Promtail | Chưa triển khai |
+| Triển khai | Docker + Docker Compose | Đã triển khai (Task 9) |
+| Quan sát | Prometheus, Grafana, cAdvisor, mysqld-exporter | Đã triển khai (Task 12) |
+| Logging | Loki 3.1.0 + Promtail 3.1.0 + JSON structured logging | Đã triển khai (Task 13) |
 
 ## 3. Cấu trúc thư mục
 
@@ -51,12 +51,15 @@ TKPM/
 │   ├── prometheus/
 │   ├── grafana/
 │   └── mysql-exporter/
-├── logging/
+├── logging/                    # Task 13: log tập trung
 │   ├── loki/
+│   │   └── loki-config.yml     # Loki standalone, schema TSDB v13, retention 7 ngày
 │   └── promtail/
+│       └── promtail-config.yml # Thu thập log Docker, gắn nhãn `service`, parse JSON
 ├── docs/
 │   └── DECISIONS.md            # quyết định kiến trúc đã chốt
-├── docker-compose.yml          # khung, hiện chỉ có service `app`
+├── docker-compose.yml          # 10 service: app, db, nginx, phpmyadmin, prometheus,
+│                               # cadvisor, mysqld-exporter, grafana, loki, promtail
 ├── .env.example
 ├── .gitignore
 ├── README.md
@@ -142,7 +145,7 @@ docker compose up --build
 | `nginx` | Task 9 / Task 10 ✅ | Reverse proxy, security headers, giới hạn request, xử lý lỗi proxy; HTTPS tự ký là tùy chọn (mục 9.2) |
 | `prometheus`, `prom-client` `/metrics` | Task 11 ✅ | Metrics HTTP request, latency, lỗi 4xx/5xx, booking/payment; Prometheus chạy tại :9090 |
 | `grafana`, `cadvisor`, `mysqld-exporter` | Task 12 ✅ | Dashboard container, app, MySQL; Grafana chạy tại :3001, exporter nội bộ |
-| `loki`, `promtail` | Task 13 | Log tập trung, truy vấn LogQL |
+| `loki`, `promtail` | Task 13 ✅ | Log tập trung, truy vấn LogQL trên Grafana Explore; Loki/Promtail chỉ chạy nội bộ, không mở cổng ra host |
 
 Lộ trình đầy đủ và ba commit mốc bắt buộc nằm trong `KE_HOACH_CHIA_TASK_CHO_AI_AGENT.md`.
 
@@ -155,7 +158,9 @@ Lộ trình đầy đủ và ba commit mốc bắt buộc nằm trong `KE_HOACH_
 | Prometheus | `http://localhost:9090` | — |
 | Grafana | `http://localhost:3001` | — |
 
-`Loki / Promtail: thu thập log tập trung` sẽ được bổ sung ở Task 13.
+Grafana Explore (xem log tập trung): `http://localhost:3001/explore` — hướng dẫn ở mục 9.5.
+
+> **Loki và Promtail không có URL truy cập từ host.** Loki chỉ mở cổng `3100` trong mạng nội bộ `tkpm_network` (Promtail đẩy log vào, Grafana đọc ra), Promtail không mở cổng nào. Đúng nguyên tắc ở mục 9 của `docs/DECISIONS.md` (mục 8 trong tài liệu): chỉ Nginx là điểm truy cập công khai; log được xem gián tiếp qua Grafana.
 
 ### 9.1. Security headers và giới hạn request (Task 10)
 
@@ -297,6 +302,73 @@ sum by (status) (movie_ticket_payments_total)
   3. **Tài nguyên Container (cAdvisor):** Mức dùng CPU (%), RAM (bytes), lưu lượng mạng (RX/TX bytes/sec) của từng container (`tkpm_app`, `tkpm_db`, `tkpm_nginx`, `tkpm_prometheus`, `tkpm_cadvisor`, `tkpm_mysqld_exporter`, `tkpm_grafana`).
   4. **Cơ sở dữ liệu MySQL (mysqld-exporter):** Tần suất truy vấn mỗi giây (QPS), số kết nối khách (threads & max used), băng thông mạng MySQL.
 
+### 9.5. Log tập trung với Loki & Promtail (Task 13)
+
+**Luồng dữ liệu:** Ứng dụng / Nginx / MySQL ghi log ra `stdout`/`stderr` → Docker giữ container log → **Promtail** thu thập qua Docker API, gắn nhãn rồi đẩy về **Loki** → xem và truy vấn bằng **Grafana Explore**.
+
+**Xem log trên Grafana Explore:**
+
+1. Mở `http://localhost:3001` và đăng nhập (tài khoản cấu hình trong `.env`, mặc định `admin` / `admin`).
+2. Vào **Explore** (biểu tượng la bàn ở menu bên trái), hoặc mở trực tiếp `http://localhost:3001/explore`.
+3. Ở ô chọn datasource phía trên bên trái, chọn **Loki**.
+4. Dán truy vấn LogQL vào ô **Query** rồi bấm **Run query**. Mở một dòng log để xem đầy đủ các trường JSON.
+
+**Nhãn (labels) do Promtail gắn cho từng stream:**
+
+| Nhãn | Giá trị | Ý nghĩa |
+|---|---|---|
+| `service` | `movie-app`, `nginx`, `mysql`, `prometheus`, `grafana`, `cadvisor`, `mysqld_exporter`, `pma`, `loki`, `promtail` | Dịch vụ phát sinh log — nhãn chính để truy vấn |
+| `container` | `tkpm_app`, `tkpm_nginx`, `tkpm_db`, ... | Tên container thật |
+| `level` | `info`, `warn`, `error` | Chỉ có ở log JSON của ứng dụng |
+| `type` | `http_request`, `booking_event`, `payment_event`, `system_error`, `system_event` | Chỉ có ở log JSON của ứng dụng |
+
+Grafana/Loki tự bổ sung thêm `service_name` (sao chép từ `service`) và `detected_level` (mức log suy ra từ nội dung) — đây là tính năng sẵn có của Loki 3.x, không phải cấu hình của dự án.
+
+**Ba truy vấn LogQL minh chứng (đã chạy và xác nhận trên Grafana Explore):**
+
+| # | Mục đích | Truy vấn LogQL |
+|---|----------|----------------|
+| 1 | Toàn bộ log của ứng dụng đặt vé | `{service="movie-app"}` |
+| 2 | Lọc lỗi hệ thống / HTTP ≥ 400 | `{service="movie-app"} \|= "error"`<br>`{service="movie-app"} \| json \| status >= 400` |
+| 3 | Sự kiện nghiệp vụ đặt vé / thanh toán | `{service="movie-app"} \| json \| type="booking_event"`<br>`{service="movie-app"} \| json \| type="payment_event"` |
+
+Một số truy vấn hữu ích khác:
+
+```logql
+# Log của Nginx (reverse proxy) và MySQL
+{service="nginx"}
+{service="mysql"}
+
+# Chỉ log lỗi của ứng dụng (nhờ nhãn `level` do Promtail bóc từ JSON)
+{service="movie-app", level="error"}
+
+# Số dòng log mỗi phút theo từng dịch vụ
+sum by (service) (count_over_time({service=~".+"}[1m]))
+
+# Đếm số lần đặt vé theo trạng thái trong 1 giờ
+sum by (status) (count_over_time({service="movie-app"} | json | type="booking_event" [1h]))
+
+# Các request chậm hơn 500ms (parse JSON tại thời điểm truy vấn)
+{service="movie-app"} | json | type="http_request" | duration_ms > 500
+```
+
+**Log ứng dụng có cấu trúc (JSON Lines) — ví dụ thực tế:**
+
+```json
+{"timestamp":"2026-10-10T10:07:46.972Z","level":"warn","service":"movie-app","type":"payment_event","payment_id":11,"booking_id":13,"method":"bank_transfer","amount":"180000.00","status":"failed","reason":"simulated_failure"}
+{"timestamp":"2026-10-10T10:07:47.026Z","level":"warn","service":"movie-app","type":"http_request","method":"POST","path":"/api/bookings","status":409,"duration_ms":8.73,"ip":"172.18.0.1","error_type":"4xx"}
+{"timestamp":"2026-10-10T10:07:34.036Z","level":"error","service":"movie-app","type":"system_error","msg":"Data truncated for column 'method' at row 1","path":"/api/payments","method":"POST","error_code":"WARN_DATA_TRUNCATED"}
+```
+
+Bốn loại log nghiệp vụ: `http_request` (mọi request), `booking_event` (đặt vé thành công/thất bại), `payment_event` (thanh toán), `system_error` (lỗi ngoại lệ/DB). Nhật ký khởi động dùng `system_event`.
+
+**Lưu ý khi đọc log:**
+
+- `{service="mysql"}` chỉ có dữ liệu khi MySQL thực sự ghi sự kiện (khởi động, cảnh báo, lỗi). Lúc hệ thống chạy êm, truy vấn này **rỗng là bình thường**, không phải lỗi cấu hình.
+- Endpoint `/metrics` **không** được ghi log: Prometheus cào mỗi 5 giây, ghi log mỗi lần cào sẽ làm ngập Loki mà không mang thông tin nghiệp vụ.
+- Log của ứng dụng **không bao giờ** chứa mật khẩu, token/cookie, secret key, số thẻ hay CVV: `app/src/services/logger.js` tự động che (`[REDACTED]`) mọi trường có tên nhạy cảm, và log request chỉ ghi pathname (đã cắt bỏ query string).
+- Log cũ hơn **7 ngày** bị Loki tự động xoá (retention), volume lưu log là `loki_data`.
+
 ## 10. Lưu ý bảo mật
 
 - `.env`, private key và chứng chỉ riêng **không** được commit — toàn bộ `nginx/certs/` (trừ `.gitkeep`) và `nginx/conf.d/default-ssl.conf` đã bị `.gitignore` loại trừ.
@@ -304,7 +376,9 @@ sum by (status) (movie_ticket_payments_total)
 - HSTS chỉ bật trên server block HTTPS; không bật trên HTTP. HSTS không dùng `includeSubDomains`/`preload` cho môi trường demo.
 - Dùng tài khoản MySQL riêng cho ứng dụng, không dùng `root` để kết nối từ app.
 - Truy vấn SQL phải tham số hóa; mật khẩu chỉ lưu dạng hash.
-- Chỉ Nginx được public khi triển khai thật; MySQL và các exporter chỉ nằm trên mạng nội bộ.
+- Chỉ Nginx được public khi triển khai thật; MySQL, các exporter và Loki/Promtail chỉ nằm trên mạng nội bộ.
+- **Không ghi mật khẩu (plain text hoặc hash), token/cookie phiên, secret key, số thẻ hoặc CVV vào log.** Quy tắc này được thi hành ở tầng code bởi `sanitize()` trong `app/src/services/logger.js`, không chỉ ở quy ước.
+- Log request chỉ ghi pathname (đã cắt query string), không ghi body/header — tránh rò rỉ tham số nhạy cảm vào Loki.
 - Không trả stack trace hoặc thông tin nhạy cảm cho người dùng cuối.
 - Ưu tiên image phiên bản cố định thay vì `latest`.
 

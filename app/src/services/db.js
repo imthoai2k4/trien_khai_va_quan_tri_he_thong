@@ -1,6 +1,7 @@
 'use strict';
 
 const mysql = require('mysql2/promise');
+const logger = require('./logger');
 
 const pool = mysql.createPool({
   host: process.env.MYSQL_HOST || 'localhost',
@@ -18,11 +19,16 @@ const pool = mysql.createPool({
 // Kiểm tra kết nối khi khởi động
 pool.getConnection()
   .then((conn) => {
-    console.log(JSON.stringify({ level: 'info', msg: 'Database connection established' }));
+    logger.systemEvent({ msg: 'Database connection established', db_host: process.env.MYSQL_HOST || 'localhost' });
     conn.release();
   })
   .catch((err) => {
-    console.error(JSON.stringify({ level: 'error', msg: 'Database connection failed', error: err.message }));
+    // Lỗi lúc khởi động, không gắn với request nào nên không có path/method.
+    logger.systemError({
+      msg: 'Database connection failed',
+      error_code: err.code || 'DB_CONNECT_ERROR',
+      stack: err.stack,
+    });
     // Không throw ở đây để server vẫn lên (health endpoint vẫn sống), nhưng báo lỗi vào log
   });
 
