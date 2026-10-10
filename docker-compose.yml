@@ -49,8 +49,16 @@ services:
     container_name: tkpm_nginx
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
+      # Chứng chỉ tự ký cho demo HTTPS (Task 10).
+      # Mount read-only để Nginx không bao giờ ghi đè private key.
+      # Thư mục này chỉ chứa .gitkeep là đủ cho chế độ HTTP hiện tại; Nginx chỉ
+      # thực sự đọc tới nó khi `nginx/conf.d/default-ssl.conf` được bật.
+      - ./nginx/certs:/etc/nginx/certs:ro
     ports:
       - "80:80"
+      # Cổng 443 chỉ thực sự phục vụ sau khi bật default-ssl.conf (xem README).
+      # Việc ánh xạ sẵn cổng không ảnh hưởng chế độ HTTP hiện tại.
+      - "443:443"
     depends_on:
       - app
     restart: unless-stopped

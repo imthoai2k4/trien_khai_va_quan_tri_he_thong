@@ -13,11 +13,16 @@ yarn-error.log*
 dist/
 build/
 
-# SSL/TLS certificates (private keys)
-nginx/certs/*.key
-nginx/certs/*.pem
-nginx/certs/*.crt
+# SSL/TLS certificates (private keys + chứng chỉ riêng)
+# Bỏ qua TOÀN BỘ nội dung nginx/certs/ (không chỉ .key/.pem/.crt) để chắc chắn
+# không có private key, CSR hay định dạng chứng chỉ nào bị commit.
+nginx/certs/*
 !nginx/certs/.gitkeep
+
+# Cấu hình HTTPS đã bật cục bộ. Không commit vì nó tham chiếu tới chứng chỉ chỉ
+# tồn tại trên máy đã tạo cert — commit sẽ làm Nginx khởi động thất bại ở máy
+# khác. Bản mẫu an toàn để commit là nginx/conf.d/default-ssl.conf.example.
+nginx/conf.d/default-ssl.conf
 
 # Docker volumes data
 mysql-data/

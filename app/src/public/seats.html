@@ -131,7 +131,10 @@
               >
                 💳 Tiếp tục thanh toán →
               </button>
-              <a href="javascript:history.back()" class="btn btn--ghost btn--full">← Quay lại chọn suất</a>
+              <!-- Task 10: không dùng href với scheme "javascript" vì CSP
+                   `script-src 'self'` sẽ chặn. Handler được gắn trong js/app.js;
+                   href chỉ là fallback khi mở trang trực tiếp (không có history). -->
+              <a href="movie.html" id="back-btn" class="btn btn--ghost btn--full">← Quay lại chọn suất</a>
             </div>
 
             <p class="text-xs text-muted text-center" style="margin-top:1rem">

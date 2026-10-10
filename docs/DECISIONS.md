@@ -404,6 +404,34 @@ Không dùng trigger để enforce quy tắc liên bảng (payment thất bại 
 - Cấu hình App phải đợi Database sẵn sàng (`depends_on: db: condition: service_healthy`).
 - Database có `healthcheck` ping định kỳ để đảm bảo MySQL thực sự có thể phục vụ (sử dụng lệnh `mysqladmin ping`).
 
+## 22. Quyết định Task 10 — Hardening Nginx và cấu hình bảo mật/vận hành
+
+### 22.1. Security Headers & Content Security Policy (CSP)
+- **Vị trí khai báo:** Toàn bộ security headers được khai báo duy nhất ở cấp `server` với chỉ thị `always` (`X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-XSS-Protection: 0`). Không đặt trong các block `location` để tránh việc `add_header` trong `location` ghi đè các header kế thừa từ `server` và tránh trùng lặp.
+- **CSP (Content-Security-Policy):**
+  - Khai báo nghiêm ngặt: `default-src 'self'`, `script-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'self'`, `form-action 'self'`.
+  - Nới lỏng tối thiểu cho tài nguyên thực tế: `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://images.unsplash.com`.
+  - Khắc phục tương thích CSP: Loại bỏ `href="javascript:history.back()"` trong `seats.html`, thay bằng ID `#back-btn` và gắn event listener trong `app.js` để tuyệt đối không dùng inline script / javascript scheme, bảo đảm an toàn với CSP `script-src 'self'`.
+- **HSTS (Strict-Transport-Security):** Chỉ kích hoạt trên block server HTTPS (`default-ssl.conf.example`) với `max-age=31536000`. Tuyệt đối không bật trên server block HTTP để tránh khóa domain hoặc lỗi truy cập cục bộ. Không dùng `includeSubDomains` hoặc `preload` cho môi trường demo.
+
+### 22.2. Quản lý chứng chỉ và HTTPS tự ký
+- **Tùy chọn HTTPS:** Trạng thái mặc định của repo luôn phục vụ HTTP (cổng 80) để đảm bảo khởi động không lỗi. Cấu hình HTTPS được cung cấp dưới dạng file mẫu `nginx/conf.d/default-ssl.conf.example` (Nginx chỉ nạp `*.conf`, không nạp `.example`).
+- **An toàn chứng chỉ:**
+  - Mount thư mục `./nginx/certs:/etc/nginx/certs:ro` dạng read-only trong `docker-compose.yml` và mở sẵn cổng `443:443`.
+  - Cấu hình `.gitignore` loại trừ toàn bộ `nginx/certs/*` (ngoại trừ `.gitkeep`) và loại trừ `nginx/conf.d/default-ssl.conf` để ngăn chặn rò rỉ private key hoặc chứng chỉ nội bộ vào git.
+
+### 22.3. Giới hạn tài nguyên và Timeout
+- Cấu hình các giới hạn an toàn ở context http/server:
+  - `client_max_body_size 1m`: Đủ cho các API JSON của hệ thống nhưng ngăn chặn tấn công DoS tải file lớn.
+  - `client_body_timeout 15s`, `client_header_timeout 15s`, `send_timeout 30s`.
+  - `large_client_header_buffers 4 16k`.
+  - `proxy_connect_timeout 5s`, `proxy_send_timeout 30s`, `proxy_read_timeout 30s`.
+- Không khai báo lại `keepalive_timeout` trong `default.conf` do đã được định nghĩa ở file cấu hình gốc `/etc/nginx/nginx.conf` của image alpine (tránh lỗi duplicate directive).
+
+### 22.4. Xử lý lỗi Upstream Proxy và Che giấu thông tin
+- **`server_tokens off;`**: Ẩn phiên bản Nginx khỏi header `Server` và các trang mã lỗi mặc định.
+- **Xử lý lỗi 502/503/504:** Kích hoạt `proxy_intercept_errors on;` cùng với các named location (`@upstream_502`, `@upstream_503`, `@upstream_504`). Các trang lỗi trả về thông báo văn bản ngắn gọn, giữ nguyên HTTP status code, không để lộ đường dẫn tệp tin, tên container hay chi tiết kiến trúc nội bộ khi container `app` gặp sự cố.
+
 ---
 
 ## Lịch sử cập nhật
@@ -421,3 +449,4 @@ Không dùng trigger để enforce quy tắc liên bảng (payment thất bại 
 | 2026-10-09 | Task 7 | Thêm mục 19: API Thanh toán giả lập, thao tác lặp an toàn, nối luồng UI hoàn chỉnh |
 | 2026-10-09 | Task 8 | Thêm mục 20: JWT Authentication, phân quyền Admin và Dashboard quản trị cơ bản |
 | 2026-10-09 | Task 9 | Thêm mục 21: Kiến trúc Docker Compose, Reverse Proxy Nginx và Database Healthcheck |
+| 2026-10-10 | Task 10 | Thêm mục 22: Hardening Nginx, security headers, CSP, giới hạn request, xử lý lỗi upstream và HTTPS demo |

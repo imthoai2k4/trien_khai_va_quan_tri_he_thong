@@ -446,6 +446,20 @@ async function initSeatsPage() {
     if (proceedBtn) proceedBtn.disabled = count === 0;
   }
 
+  // Nút "Quay lại chọn suất" (Task 10): CSP `script-src 'self'` không cho phép
+  // href với scheme "javascript", nên handler được gắn ở đây thay vì inline.
+  const backBtn = $('#back-btn');
+  if (backBtn) {
+    backBtn.addEventListener('click', (event) => {
+      // Chỉ can thiệp khi thực sự có lịch sử điều hướng; nếu không thì để href
+      // mặc định (movie.html) hoạt động như fallback.
+      if (window.history.length > 1) {
+        event.preventDefault();
+        window.history.back();
+      }
+    });
+  }
+
   // Proceed button
   const proceedBtn = $('#proceed-btn');
   if (proceedBtn) {
