@@ -83,11 +83,9 @@ Sao chép `.env.example` thành `.env` rồi chỉnh giá trị. **Không commit
 | `TKPM_PMA_PORT` | `8080` | Cổng phpMyAdmin |
 | `TKPM_PROMETHEUS_PORT` | `9090` | Cổng giao diện Prometheus |
 | `TKPM_GRAFANA_PORT` | `3001` | Cổng Grafana |
-| `DB_USER`, `DB_PASS`, `DB_NAME` | Xem `.env.example` | Kết nối app và exporter trong cấu hình hiện tại |
-| `JWT_SECRET` | Placeholder trong mẫu | Khóa ký JWT; thay bằng giá trị riêng |
 | `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD` | Xem `.env.example` | Tài khoản Grafana |
 
-Các giá trị trong `.env.example` chỉ phục vụ demo. Đổi mật khẩu và secret trước khi đưa server ra mạng; không dùng `.env.example` làm file `.env` cho triển khai thật.
+Các biến cổng và Grafana ở trên được Compose đọc từ `.env`. Cấu hình DB và JWT hiện còn dùng giá trị demo khai báo trong `docker-compose.yml`; cần chuyển chúng sang biến môi trường và thay bằng secret riêng trước khi đưa server ra mạng (xem tiêu chí hardening).
 
 ## 5. Yêu cầu môi trường
 
