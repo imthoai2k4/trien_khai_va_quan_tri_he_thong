@@ -4,7 +4,7 @@ Website đặt vé xem phim: xem phim, xem suất chiếu, chọn ghế, đặt 
 
 > **Trạng thái hiện tại: hoàn thành Task 13 — logging tập trung với Loki & Promtail.**
 > Hệ thống chạy đầy đủ qua Docker Compose: MySQL, Express (API phim/suất chiếu/đặt vé/thanh toán giả lập/đăng nhập), giao diện tĩnh, Nginx reverse proxy đã gia cố security headers/giới hạn request/xử lý lỗi proxy, **monitoring** (Prometheus + cAdvisor + mysqld-exporter + Grafana dashboard) và **logging tập trung** (Loki + Promtail + JSON structured logging, truy vấn bằng LogQL trên Grafana Explore).
-> **Chưa có** HTTPS mặc định (là tùy chọn demo — xem mục 9.2).
+> **Chưa có** HTTPS mặc định (là tùy chọn demo — xem mục 9.5).
 
 ---
 
@@ -97,8 +97,9 @@ Tất cả giá trị trên là placeholder, **không phải secret thật**. Đ
 ## 5. Yêu cầu môi trường
 
 - Git
-- Node.js 20 LTS trở lên và npm
-- Docker Desktop + Docker Compose (cần cho các task hạ tầng, chưa cần ở Task 1)
+- Node.js 20 LTS trở lên và npm (chỉ cần nếu chạy app trực tiếp để phát triển)
+- Docker Engine và Docker Compose plugin trên Ubuntu Server; hoặc Docker Desktop + Docker Compose trên Windows
+- Máy Ubuntu Server chạy VMware. VM đã triển khai hiện tại dùng Ubuntu 24.04.4 LTS.
 
 ## 6. Cài đặt dependency
 
@@ -143,32 +144,70 @@ docker compose up --build
 
 > `app/src/server.js` hiện chỉ có `/healthz` và phục vụ file tĩnh. `/healthz` là endpoint kiểm tra tiến trình, **không phải** API nghiệp vụ.
 
-## 8. Các service sẽ bổ sung ở task sau
+## 8. Các service trong stack hiện tại
 
 | Service | Task | Ghi chú |
 |---|---|---|
-| `mysql`, `phpmyadmin` | Task 9 | MySQL 8 + quản trị dữ liệu; MySQL không public |
-| `nginx` | Task 9 / Task 10 ✅ | Reverse proxy, security headers, giới hạn request, xử lý lỗi proxy; HTTPS tự ký là tùy chọn (mục 9.2) |
+| `mysql`, `phpmyadmin` | Task 9 ✅ | MySQL 8 + quản trị dữ liệu; MySQL không public |
+| `nginx` | Task 9 / Task 10 ✅ | Reverse proxy, security headers, giới hạn request, xử lý lỗi proxy; HTTPS tự ký là tùy chọn (mục 9.5) |
 | `prometheus`, `prom-client` `/metrics` | Task 11 ✅ | Metrics HTTP request, latency, lỗi 4xx/5xx, booking/payment; Prometheus chạy tại :9090 |
 | `grafana`, `cadvisor`, `mysqld-exporter` | Task 12 ✅ | Dashboard container, app, MySQL; Grafana chạy tại :3001, exporter nội bộ |
 | `loki`, `promtail` | Task 13 ✅ | Log tập trung, truy vấn LogQL trên Grafana Explore; Loki/Promtail chỉ chạy nội bộ, không mở cổng ra host |
 
 Lộ trình đầy đủ và ba commit mốc bắt buộc nằm trong `KE_HOACH_CHIA_TASK_CHO_AI_AGENT.md`.
 
-## 9. URL truy cập
+## 9. Chạy trên Ubuntu Server (VMware)
 
-| Dịch vụ | HTTP | HTTPS (tùy chọn, xem 9.2) |
-|---|---|---|
-| Website (qua Nginx) | `http://localhost` | `https://localhost` |
-| phpMyAdmin | `http://localhost:8080` | — |
-| Prometheus | `http://localhost:9090` | — |
-| Grafana | `http://localhost:3001` | — |
+### 9.1. Khởi động và dừng dự án
 
-Grafana Explore (xem log tập trung): `http://localhost:3001/explore` — hướng dẫn ở mục 9.5.
+Mở VMware Workstation và bật VM Ubuntu. Stack trên VM được lưu tại `~/TKPM`; Docker Engine và các container được cấu hình tự khởi động. Nếu container chưa chạy sau khi VM bật, đăng nhập Ubuntu và chạy:
 
-> **Loki và Promtail không có URL truy cập từ host.** Loki chỉ mở cổng `3100` trong mạng nội bộ `tkpm_network` (Promtail đẩy log vào, Grafana đọc ra), Promtail không mở cổng nào. Đúng nguyên tắc ở mục 9 của `docs/DECISIONS.md` (mục 8 trong tài liệu): chỉ Nginx là điểm truy cập công khai; log được xem gián tiếp qua Grafana.
+```bash
+cd ~/TKPM
+docker compose up -d
+docker compose ps
+```
 
-### 9.1. Security headers và giới hạn request (Task 10)
+Theo dõi log:
+
+```bash
+cd ~/TKPM
+docker compose logs -f
+```
+
+Dừng các container nhưng vẫn giữ Ubuntu chạy:
+
+```bash
+cd ~/TKPM
+docker compose stop
+```
+
+Chạy lại bằng `docker compose up -d`. Có thể tắt VM từ menu Shutdown của Ubuntu/VMware; sau khi bật lại Docker sẽ tự khởi động các container có chính sách restart. Nếu dịch vụ chưa lên, dùng lệnh `docker compose up -d` ở trên.
+
+### 9.2. Địa chỉ truy cập hiện tại
+
+IP hiện tại của VM là `192.168.213.128`. Mở các đường dẫn sau từ Windows host:
+
+| Dịch vụ | URL hiện tại |
+|---|---|
+| Trang chủ TKPM Cinema | [http://192.168.213.128:8082/](http://192.168.213.128:8082/) |
+| Đăng nhập / Bảng điều khiển Admin | [http://192.168.213.128:8082/admin.html](http://192.168.213.128:8082/admin.html) |
+| phpMyAdmin | [http://192.168.213.128:8083/](http://192.168.213.128:8083/) |
+| Prometheus | [http://192.168.213.128:9091/](http://192.168.213.128:9091/) |
+| Grafana | [http://192.168.213.128:3001/](http://192.168.213.128:3001/) |
+| Grafana Explore (log) | [http://192.168.213.128:3001/explore](http://192.168.213.128:3001/explore) |
+
+Đăng nhập ứng dụng mẫu: Admin `admin@demo.com` / `Admin@123`; User `user@demo.com` / `User@123`; User `binh@demo.com` / `User@123`.
+
+IP trên là địa chỉ VM đã kiểm tra; VMware NAT có thể cấp địa chỉ khác sau này. Nếu vậy, chạy `hostname -I` trong Ubuntu và thay `192.168.213.128` trong URL bằng IP mới. Từ Windows cần dùng IP của VM, không dùng `localhost` (vì `localhost` là chính máy đang mở trình duyệt). Các cổng host của VM hiện tại được đặt thành website `8082`, phpMyAdmin `8083`, Prometheus `9091`, Grafana `3001` để tránh xung đột với dịch vụ khác.
+
+Loki và Promtail không có URL truy cập từ host. Loki chỉ mở cổng `3100` trong mạng nội bộ `tkpm_network` (Promtail đẩy log vào, Grafana đọc ra), Promtail không mở cổng nào. Log được xem gián tiếp qua Grafana Explore.
+
+### 9.3. Môi trường phát triển cục bộ
+
+Các hướng dẫn bên dưới mục này mô tả cấu hình phát triển cục bộ trên `localhost`. Chúng không phải địa chỉ của Ubuntu VM. Cổng mặc định trong `.env.example` là `80`, `8080`, `9090`, `3001`; trên VM đã triển khai các cổng được đổi như bảng trên.
+
+### 9.4. Security headers và giới hạn request (Task 10)
 
 Nginx đặt các header sau **trên mọi phản hồi**, kể cả phản hồi lỗi:
 
@@ -180,13 +219,13 @@ X-XSS-Protection: 0
 Content-Security-Policy: default-src 'self'; ...
 ```
 
-- `Strict-Transport-Security` **chỉ** được bật khi phục vụ qua HTTPS (mục 9.2). Không bao giờ bật trên kết nối HTTP.
+- `Strict-Transport-Security` **chỉ** được bật khi phục vụ qua HTTPS (mục 9.5). Không bao giờ bật trên kết nối HTTP.
 - CSP giữ `default-src 'self'` và `script-src 'self'`; chỉ mở thêm đúng những nguồn mà giao diện đang dùng: `fonts.googleapis.com` / `fonts.gstatic.com` (Google Fonts trong `app/src/public/css/style.css`) và `images.unsplash.com` (poster phim demo). `style-src` phải cho phép `'unsafe-inline'` vì giao diện hiện dùng thuộc tính `style=` và một khối `<style>` trong `admin.html`.
 - Giới hạn và timeout đang áp dụng: `client_max_body_size 1m`, `client_body_timeout 15s`, `client_header_timeout 15s`, `send_timeout 30s`, `proxy_connect_timeout 5s`, `proxy_send_timeout 30s`, `proxy_read_timeout 30s`. Các mức này rộng rãi hơn nhiều so với payload thực tế của API đăng nhập/đặt vé/thanh toán (chỉ vài KB), nên không gây lỗi nghiệp vụ.
 - Lỗi upstream `502/503/504` được Nginx chặn và thay bằng thông báo ngắn, giữ nguyên mã trạng thái, không lộ đường dẫn hay chi tiết cấu hình nội bộ.
 - `server_tokens off` để header `Server` không lộ phiên bản Nginx.
 
-### 9.2. HTTPS tự ký cho demo
+### 9.5. HTTPS tự ký cho demo
 
 HTTPS là **tùy chọn**. Trạng thái mặc định của repository chỉ chạy HTTP và Nginx **luôn khởi động được** ngay cả khi chưa có chứng chỉ, vì file cấu hình HTTPS chỉ là bản mẫu `nginx/conf.d/default-ssl.conf.example` (Nginx chỉ nạp file `*.conf`, không nạp file `.example`).
 
@@ -261,7 +300,7 @@ Vì chứng chỉ tự ký không được một tổ chức phát hành chứng
 
 Nếu đã bật HTTPS rồi tắt, trình duyệt có thể còn ghi nhớ HSTS và tự chuyển sang `https://localhost`. Xóa ghi nhớ đó tại `chrome://net-internals/#hsts` (mục *Delete domain security policies*) rồi tải lại.
 
-### 9.3. Metrics ứng dụng và Prometheus (Task 11)
+### 9.6. Metrics ứng dụng và Prometheus (Task 11)
 
 - **Endpoint Metrics của App:** `http://localhost/metrics` (phục vụ qua Nginx) hoặc nội bộ `http://app:3000/metrics`.
 - **Giao diện quản trị Prometheus:** `http://localhost:9090`
@@ -297,7 +336,7 @@ movie_ticket_bookings_total{status="pending"}
 sum by (status) (movie_ticket_payments_total)
 ```
 
-### 9.4. Dashboard giám sát Grafana (Task 12)
+### 9.7. Dashboard giám sát Grafana (Task 12)
 
 - **Địa chỉ truy cập:** `http://localhost:3001`
 - **Tài khoản đăng nhập:** Thiết lập trong file `.env` (mặc định: `admin` / cấu hình qua `GRAFANA_ADMIN_PASSWORD`).
@@ -308,7 +347,7 @@ sum by (status) (movie_ticket_payments_total)
   3. **Tài nguyên Container (cAdvisor):** Mức dùng CPU (%), RAM (bytes), lưu lượng mạng (RX/TX bytes/sec) của từng container (`tkpm_app`, `tkpm_db`, `tkpm_nginx`, `tkpm_prometheus`, `tkpm_cadvisor`, `tkpm_mysqld_exporter`, `tkpm_grafana`).
   4. **Cơ sở dữ liệu MySQL (mysqld-exporter):** Tần suất truy vấn mỗi giây (QPS), số kết nối khách (threads & max used), băng thông mạng MySQL.
 
-### 9.5. Log tập trung với Loki & Promtail (Task 13)
+### 9.8. Log tập trung với Loki & Promtail (Task 13)
 
 **Luồng dữ liệu:** Ứng dụng / Nginx / MySQL ghi log ra `stdout`/`stderr` → Docker giữ container log → **Promtail** thu thập qua Docker API, gắn nhãn rồi đẩy về **Loki** → xem và truy vấn bằng **Grafana Explore**.
 
