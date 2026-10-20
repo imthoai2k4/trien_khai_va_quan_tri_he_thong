@@ -18,15 +18,14 @@ Ràng buộc nghiệp vụ quan trọng: **một ghế chỉ được bán một
 
 | Thành phần | Công nghệ | Trạng thái |
 |---|---|---|
-| Backend | Node.js 20 LTS + Express 4 | Đã khai báo dependency |
-| Giao diện | HTML/CSS/JS tĩnh do Express phục vụ (không React/Vue) | Mới có trang giữ chỗ |
-| Cơ sở dữ liệu | MySQL 8, driver `mysql2`, SQL tham số hóa (không ORM) | Chưa triển khai |
+| Backend | Node.js 20 + Express 4 | API phim, suất chiếu, ghế, booking, thanh toán giả lập và quản trị |
+| Giao diện | HTML/CSS/JavaScript tĩnh do Express phục vụ | Luồng người dùng và trang admin |
+| Cơ sở dữ liệu | MySQL 8, driver `mysql2`, SQL tham số hóa | Schema và dữ liệu demo trong `database/` |
 | Xác thực | JWT (`jsonwebtoken`) + `bcryptjs`, role `user`/`admin` | Đã triển khai (Task 8) |
-| Metrics | `prom-client` (`GET /metrics`) | Đã triển khai (Task 11) |
-| Reverse proxy | Nginx (điểm truy cập công khai duy nhất) | Đã triển khai + hardening Task 10 |
-| Triển khai | Docker + Docker Compose | Đã triển khai (Task 9) |
-| Quan sát | Prometheus, Grafana, cAdvisor, mysqld-exporter | Đã triển khai (Task 12) |
-| Logging | Loki 3.1.0 + Promtail 3.1.0 + JSON structured logging | Đã triển khai (Task 13) |
+| Reverse proxy | Nginx | Điểm vào website, security headers và giới hạn request |
+| Monitoring | Prometheus, Grafana, cAdvisor, mysqld-exporter | Metrics ứng dụng, container và MySQL |
+| Logging | Loki 3.1.0 + Promtail 3.1.0 | Log JSON và truy vấn LogQL trong Grafana |
+| Triển khai | Docker Compose | Toàn bộ dịch vụ được khai báo trong `docker-compose.yml` |
 
 ## 3. Cấu trúc thư mục
 
@@ -34,17 +33,16 @@ Ràng buộc nghiệp vụ quan trọng: **một ghế chỉ được bán một
 TKPM/
 ├── app/
 │   ├── src/
-│   │   ├── controllers/        # (trống) logic xử lý request — task sau
-│   │   ├── routes/             # (trống) khai báo route — task sau
-│   │   ├── services/           # (trống) truy vấn DB, nghiệp vụ — task sau
-│   │   ├── middleware/         # (trống) auth, validate, logging — task sau
-│   │   ├── public/             # tài nguyên tĩnh Express phục vụ
-│   │   │   └── index.html      # trang giữ chỗ của bộ khung
-│   │   └── server.js           # Express server tối thiểu
+│   │   ├── controllers/        # xử lý API và nghiệp vụ
+│   │   ├── routes/             # API routes
+│   │   ├── services/           # database, logging và nghiệp vụ
+│   │   ├── middleware/         # auth, validation, logging, lỗi
+│   │   ├── public/             # giao diện người dùng và admin
+│   │   └── server.js            # khởi tạo Express
 │   ├── package.json
 │   ├── package-lock.json
 │   └── Dockerfile
-├── database/                   # (trống) init.sql, sample-data.sql — Task 2
+├── database/                   # schema MySQL và dữ liệu demo
 ├── nginx/
 │   └── certs/                  # chứng chỉ tự ký, không commit private key
 ├── monitoring/
@@ -80,81 +78,40 @@ Sao chép `.env.example` thành `.env` rồi chỉnh giá trị. **Không commit
 
 | Biến | Mặc định trong `.env.example` | Dùng cho |
 |---|---|---|
-| `MYSQL_DATABASE` | `movie_ticket` | Tên database |
-| `MYSQL_USER` | `movie_app` | Tài khoản MySQL cho app (không dùng `root`) |
-| `MYSQL_PASSWORD` | `change_me` | Mật khẩu tài khoản app |
-| `MYSQL_ROOT_PASSWORD` | `change_me_root` | Mật khẩu root MySQL (chỉ dùng nội bộ) |
-| `APP_PORT` | `3000` | Cổng Express lắng nghe |
-| `NODE_ENV` | `development` | Chế độ chạy |
-| `SESSION_SECRET` | `change_me_session_secret` | Ký session |
-| `GRAFANA_ADMIN_USER` | `admin` | Tài khoản Grafana |
-| `GRAFANA_ADMIN_PASSWORD` | `change_me` | Mật khẩu Grafana |
-| `MYSQL_EXPORTER_USER` | `exporter` | Tài khoản cho mysqld-exporter |
-| `MYSQL_EXPORTER_PASSWORD` | `change_me_exporter` | Mật khẩu mysqld-exporter |
+| `TKPM_WEB_PORT` | `80` | Cổng website qua Nginx |
+| `TKPM_HTTPS_PORT` | `443` | Cổng HTTPS nếu bật cấu hình TLS |
+| `TKPM_PMA_PORT` | `8080` | Cổng phpMyAdmin |
+| `TKPM_PROMETHEUS_PORT` | `9090` | Cổng giao diện Prometheus |
+| `TKPM_GRAFANA_PORT` | `3001` | Cổng Grafana |
+| `DB_USER`, `DB_PASS`, `DB_NAME` | Xem `.env.example` | Kết nối app và exporter trong cấu hình hiện tại |
+| `JWT_SECRET` | Placeholder trong mẫu | Khóa ký JWT; thay bằng giá trị riêng |
+| `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD` | Xem `.env.example` | Tài khoản Grafana |
 
-Tất cả giá trị trên là placeholder, **không phải secret thật**. Đổi trước khi dùng cho bất kỳ môi trường nào khác ngoài demo cục bộ.
+Các giá trị trong `.env.example` chỉ phục vụ demo. Đổi mật khẩu và secret trước khi đưa server ra mạng; không dùng `.env.example` làm file `.env` cho triển khai thật.
 
 ## 5. Yêu cầu môi trường
 
 - Git
 - Node.js 20 LTS trở lên và npm (chỉ cần nếu chạy app trực tiếp để phát triển)
-- Docker Engine và Docker Compose plugin trên Ubuntu Server; hoặc Docker Desktop + Docker Compose trên Windows
-- Máy Ubuntu Server chạy VMware. VM đã triển khai hiện tại dùng Ubuntu 24.04.4 LTS.
+- Docker Desktop + Docker Compose trên Windows, hoặc Docker Engine + Compose plugin trên Ubuntu Server
+- Node.js 20 + npm chỉ cần nếu chạy app trực tiếp để phát triển
+- Để chạy trên Ubuntu VM theo cấu hình dự án, xem [hướng dẫn chuyển và chạy trên Ubuntu](migrate/MIGRATION_GUIDE.md)
 
-## 6. Cài đặt dependency
+## 6. Khởi chạy toàn bộ hệ thống
 
-```bash
-cd app
-npm install
-```
-
-Lệnh này cài dependency theo `package.json` và `package-lock.json`. Dùng `npm ci` khi cần cài lại đúng phiên bản đã khóa trong lockfile.
-
-## 7. Chạy tối thiểu
-
-Chạy trực tiếp bằng Node (không cần Docker):
+Từ thư mục gốc repository:
 
 ```bash
-cd app
-cp ../.env.example ../.env     # Windows: copy ..\.env.example ..\.env
-npm start
+cp .env.example .env
+docker compose up -d --build
+docker compose ps
 ```
 
-Mặc định server lắng nghe ở `http://localhost:3000`. Có thể đổi bằng biến `APP_PORT`.
+Trên Windows PowerShell, dùng `Copy-Item .env.example .env` thay cho lệnh `cp`. Kiểm tra log bằng `docker compose logs -f`; dừng container bằng `docker compose stop`. Các URL và tài khoản demo được ghi trong mục 9.
 
-Kiểm tra bộ khung:
+## 7. Các thành phần chạy trong Compose
 
-```bash
-curl http://localhost:3000/healthz     # -> {"status":"ok","service":"movie-ticket-app",...}
-curl -I  http://localhost:3000/        # -> 200, phục vụ app/src/public/index.html
-curl     http://localhost:3000/khong-ton-tai   # -> 404 {"error":"Not Found"}
-```
-
-Chế độ tự khởi động lại khi sửa file:
-
-```bash
-npm run dev
-```
-
-Chạy bằng Docker Compose (khung, chỉ có service `app`):
-
-```bash
-docker compose up --build
-```
-
-> `app/src/server.js` hiện chỉ có `/healthz` và phục vụ file tĩnh. `/healthz` là endpoint kiểm tra tiến trình, **không phải** API nghiệp vụ.
-
-## 8. Các service trong stack hiện tại
-
-| Service | Task | Ghi chú |
-|---|---|---|
-| `mysql`, `phpmyadmin` | Task 9 ✅ | MySQL 8 + quản trị dữ liệu; MySQL không public |
-| `nginx` | Task 9 / Task 10 ✅ | Reverse proxy, security headers, giới hạn request, xử lý lỗi proxy; HTTPS tự ký là tùy chọn (mục 9.5) |
-| `prometheus`, `prom-client` `/metrics` | Task 11 ✅ | Metrics HTTP request, latency, lỗi 4xx/5xx, booking/payment; Prometheus chạy tại :9090 |
-| `grafana`, `cadvisor`, `mysqld-exporter` | Task 12 ✅ | Dashboard container, app, MySQL; Grafana chạy tại :3001, exporter nội bộ |
-| `loki`, `promtail` | Task 13 ✅ | Log tập trung, truy vấn LogQL trên Grafana Explore; Loki/Promtail chỉ chạy nội bộ, không mở cổng ra host |
-
-Lộ trình đầy đủ và ba commit mốc bắt buộc nằm trong `KE_HOACH_CHIA_TASK_CHO_AI_AGENT.md`.
+Compose khởi chạy 10 dịch vụ: `app`, `db`, `nginx`, `phpmyadmin`, `prometheus`, `cadvisor`, `mysqld-exporter`, `grafana`, `loki` và `promtail`. Website được truy cập qua Nginx; Loki và exporter chỉ nằm trong mạng Docker nội bộ. Cổng host có thể đổi bằng các biến `TKPM_*_PORT` trong `.env`.
 
 ## 9. Chạy trên Ubuntu Server (VMware)
 
