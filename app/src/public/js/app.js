@@ -1,6 +1,7 @@
 /**
  * app.js — Logic điều hướng và state management cho Task 3 (giao diện static).
- * Không gọi API. Tất cả dữ liệu lấy từ DEMO_DATA (data.js).
+ * Tải phim, suất chiếu, đặt vé và thanh toán qua API của server.
+ * DEMO_DATA (data.js) chỉ cung cấp một số hàm định dạng cho giao diện.
  */
 'use strict';
 

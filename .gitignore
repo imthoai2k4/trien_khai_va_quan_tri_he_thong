@@ -45,6 +45,10 @@ desktop.ini
 *.log
 logs/
 
+# Migration backup data (database dump + volume tarballs)
+migrate/backup/*
+!migrate/backup/.gitkeep
+
 # Impeccable / AI agent config (nếu có)
 .impeccable/
 .claude/

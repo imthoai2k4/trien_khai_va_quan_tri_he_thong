@@ -1,0 +1,89 @@
+HUONG DAN CHAY TKPM TREN UBUNTU SERVER (VMWARE)
+================================================
+
+1. KHOI DONG DU AN
+
+  1) Mo VMware Workstation.
+  2) Bat may ao Ubuntu Server.
+  3) Cho Ubuntu khoi dong xong. Docker Engine va cac container TKPM duoc cau
+     hinh tu khoi dong lai tu dong.
+  4) Mo cac link o muc 3 tren Windows hoac may trong mang co the truy cap VM.
+
+Neu cac container chua tu chay, dang nhap Ubuntu va chay:
+
+  cd ~/TKPM
+  docker compose up -d
+
+Kiem tra trang thai:
+
+  cd ~/TKPM
+  docker compose ps
+
+Xem log neu can:
+
+  cd ~/TKPM
+  docker compose logs -f
+
+2. DUNG DU AN / TAT MAY AO
+
+De dung cac container nhung giu may Ubuntu dang bat:
+
+  cd ~/TKPM
+  docker compose stop
+
+De bat lai sau do:
+
+  cd ~/TKPM
+  docker compose up -d
+
+Co the tat Ubuntu VM tu menu Shutdown cua Ubuntu/VMware. Khi bat lai may ao,
+Docker se tu khoi dong cac container co restart policy. Neu chua thay dich vu,
+chay lai `docker compose up -d` nhu muc 1.
+
+3. LINK TRUY CAP HIEN TAI
+
+IP hien tai cua Ubuntu VM: 192.168.213.128
+
+Trang chu TKPM:
+  http://192.168.213.128:8082/
+
+Trang dang nhap / Bang dieu khien quan tri vien:
+  http://192.168.213.128:8082/admin.html
+
+phpMyAdmin:
+  http://192.168.213.128:8083/
+
+Prometheus:
+  http://192.168.213.128:9091/
+
+Grafana:
+  http://192.168.213.128:3001/
+
+Neu IP VM thay doi, dang nhap Ubuntu va xem IP moi bang lenh:
+
+  hostname -I
+
+Thay 192.168.213.128 trong cac link tren bang IP moi. `localhost` chi tro toi
+may dang mo trinh duyet; tren Windows hay dung IP cua Ubuntu VM nhu cac link tren.
+
+4. TAI KHOAN DEMO CUA UNG DUNG
+
+Admin:
+  Email:    admin@demo.com
+  Mat khau: Admin@123
+
+User:
+  Email:    user@demo.com
+  Mat khau: User@123
+
+User:
+  Email:    binh@demo.com
+  Mat khau: User@123
+
+5. GHI CHU
+
+- Khong can mo Docker Desktop tren Windows; Docker chay ben trong Ubuntu VM.
+- Cac cong host da chon de tranh xung dot voi cac dich vu khac tren VM:
+  website 8082, phpMyAdmin 8083, Prometheus 9091, Grafana 3001.
+- IP 192.168.213.128 la IP da kiem tra tai thoi diem viet huong dan; VMware
+  NAT co the cap IP khac sau nay.

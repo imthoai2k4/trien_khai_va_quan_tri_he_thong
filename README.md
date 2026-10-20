@@ -56,6 +56,12 @@ TKPM/
 │   │   └── loki-config.yml     # Loki standalone, schema TSDB v13, retention 7 ngày
 │   └── promtail/
 │       └── promtail-config.yml # Thu thập log Docker, gắn nhãn `service`, parse JSON
+├── migrate/                    # Bộ công cụ chuyển từ Windows sang Ubuntu
+│   ├── MIGRATION_GUIDE.md      # hướng dẫn từng bước
+│   ├── backup-windows.ps1      # backup dữ liệu trên Windows
+│   ├── setup-ubuntu.sh         # cài Docker Engine trên Ubuntu
+│   ├── restore-ubuntu.sh       # restore dữ liệu + khởi động stack trên Ubuntu
+│   └── verify.sh               # kiểm tra toàn diện sau khi chuyển
 ├── docs/
 │   └── DECISIONS.md            # quyết định kiến trúc đã chốt
 ├── docker-compose.yml          # 10 service: app, db, nginx, phpmyadmin, prometheus,
